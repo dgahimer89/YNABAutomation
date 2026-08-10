@@ -1,0 +1,34 @@
+# YNAB API client
+
+The console application registers `IYnabApiClient` through asynchronous `AddYnabApi(...)`. The client uses the YNAB API at `https://api.ynab.com/v1/` and receives its bearer token through DI-backed `YnabOptions`; the API client does not read secrets directly. When no plan ID is configured, registration performs plan discovery before the service provider is built, so connection and plan-count errors occur during startup.
+
+Configure the existing user secret and a default plan ID in the development environment:
+
+- `ynab_api_key` - the YNAB bearer token.
+- `ynab_plan_id` - optional plan ID used by plan-scoped methods. If omitted, `AddYnabApi(...)` calls `GET /plans` during registration and uses the only available plan; it throws if the account has zero or multiple plans. YNAB values such as `last-used` may also be used when supported by the API.
+
+The options can also be supplied under the `Ynab` configuration section using `ApiKey`, `PlanId`, and `BaseUrl`. The root-level secret names above take precedence for the API key and plan ID. No secret values should be committed to source control.
+
+The application registers `YnabDbContext` for PostgreSQL. Configure the database through the `ConnectionStrings:DefaultConnection` setting, for example:
+
+`Host=localhost;Port=5432;Database=ynabautomation;Username=postgres;Password=your-password`
+
+The default host, port, and database are used when no connection string is configured. Supply credentials through user secrets or environment variables rather than committing them to source control.
+
+## Deterministic categorization
+
+Each startup runs one categorization batch. The processor requests transactions with YNAB's `type=uncategorized` filter; it does not download categorized transactions. Inflows and outflows are supported, while transfers, deleted transactions, and transactions without a payee are recorded as skipped.
+
+Configure learned-rule safety thresholds under the `Categorization` section:
+
+- `DryRun` defaults to `true` for development safety. In this mode, proposed category changes are printed to the console and recorded locally, but no YNAB update request is sent and no pending update is created. Set `Categorization:DryRun=false` only when ready to apply changes.
+- `MinimumLearnedSampleSize` defaults to `3`.
+- `MinimumLearnedConsistency` defaults to `0.8` (80%).
+
+Explicit merchant rules are stored in `MerchantRules` with `IsExplicit=true`, a normalized payee, and a YNAB category ID. Explicit rules take precedence over learned rules. Learned rules use only prior successful automatic categorizations; ambiguous or insufficient history is recorded as `ReviewRequired` without changing YNAB.
+
+The processor persists the transaction, decision, processing run, and pending update before calling YNAB. Pending or failed updates are retried on the next startup, which handles a successful remote update followed by a local database failure without requiring categorized transactions to be fetched. On startup, EF Core applies all pending migrations with `Database.MigrateAsync()` before processing begins. A database previously created with `EnsureCreated` does not have migration history; for development, recreate that database or baseline it before using the migration-based startup.
+
+Tests use MSTest and can be run with:
+
+`dotnet test YNABAutomationConsole.Tests/YNABAutomationConsole.Tests.csproj`

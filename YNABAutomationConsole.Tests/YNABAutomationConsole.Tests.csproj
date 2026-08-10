@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+	<TargetFramework>net10.0</TargetFramework>
+	<IsPackable>false</IsPackable>
+	<IsTestProject>true</IsTestProject>
+	<Nullable>enable</Nullable>
+	<ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+	<PackageReference Include="MSTest.TestAdapter" Version="3.9.0" />
+	<PackageReference Include="MSTest.TestFramework" Version="3.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\YNABAutomation.Shared\YNABAutomation.Shared.csproj" />
+  </ItemGroup>
+</Project>

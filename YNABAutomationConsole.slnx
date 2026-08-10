@@ -1,3 +1,5 @@
-<Solution>
+<Solution>`r`n  <Project Path="YNABAutomationWeb/YNABAutomationWeb.csproj" />`r`n  <Project Path="YNABAutomation.Shared/YNABAutomation.Shared.csproj" />
+  <Project Path="YNABAutomationConsole.Tests/YNABAutomationConsole.Tests.csproj" />
   <Project Path="YNABAutomationConsole/YNABAutomationConsole.csproj" />
 </Solution>
+

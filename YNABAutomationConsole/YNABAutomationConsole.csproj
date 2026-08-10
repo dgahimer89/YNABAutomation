@@ -5,6 +5,37 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>5d16ba59-8399-4e8e-a807-61f0d306108c</UserSecretsId>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="6.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\YNABAutomation.Shared\YNABAutomation.Shared.csproj" />
+    <Compile Remove="Categorization\**\*.cs" />
+    <Compile Remove="Data\**\*.cs" />
+    <Compile Remove="Ynab\**\*.cs" />
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <Folder Include="API Documentation\" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<Content Update="@(Content)">
+			<Visible Condition="'%(NuGetItemType)' == 'Content'">false</Visible>
+		</Content>
+	</ItemGroup>
 
 </Project>

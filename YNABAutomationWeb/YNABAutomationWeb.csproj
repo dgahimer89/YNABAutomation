@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+	<TargetFramework>net10.0</TargetFramework>
+	<Nullable>enable</Nullable>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<UserSecretsId>5d16ba59-8399-4e8e-a807-61f0d306108c</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+	<ProjectReference Include="..\YNABAutomation.Shared\YNABAutomation.Shared.csproj" />
+	<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+	  <PrivateAssets>all</PrivateAssets>
+	  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	</PackageReference>
+	<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+  </ItemGroup>
+</Project>
