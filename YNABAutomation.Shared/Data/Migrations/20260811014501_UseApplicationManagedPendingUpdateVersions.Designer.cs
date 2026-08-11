@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using YNABAutomationConsole.Data;
 
 #nullable disable
 
-namespace YNABAutomationConsole.Data.Migrations
+namespace YNABAutomation.Shared.Data.Migrations
 {
     [DbContext(typeof(YnabDbContext))]
-    partial class YnabDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811014501_UseApplicationManagedPendingUpdateVersions")]
+    partial class UseApplicationManagedPendingUpdateVersions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -155,6 +158,7 @@ namespace YNABAutomationConsole.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("bytea");
 

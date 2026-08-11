@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - YNAB Automation</title>
+    <style>
+        body { font-family: sans-serif; margin: 2rem; color: #222; }
+        nav { margin-bottom: 2rem; }
+        nav a { margin-right: 1rem; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: .5rem; text-align: left; vertical-align: top; }
+        th { background: #f2f2f2; }
+        .validation-summary-errors { color: #a00; }
+        .message { padding: .75rem; background: #eef6ff; margin-bottom: 1rem; }
+        form.inline { display: inline; }
+        label { display: block; margin: .75rem 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <a asp-page="/Transactions">Pending Transactions</a>
+            <a asp-page="/Rules">Merchant Rules</a>
+        </nav>
+    </header>
+    <main>
+        @RenderBody()
+    </main>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

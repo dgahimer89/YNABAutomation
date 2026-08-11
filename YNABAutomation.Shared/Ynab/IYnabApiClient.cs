@@ -10,6 +10,10 @@ public interface IYnabApiClient
         GetTransactionsOptions? options = null,
         CancellationToken cancellationToken = default);
 
+    Task<TransactionResponse> GetTransactionAsync(
+        string transactionId,
+        CancellationToken cancellationToken = default);
+
     Task<CategoriesResponse> GetCategoriesAsync(
         CancellationToken cancellationToken = default);
 

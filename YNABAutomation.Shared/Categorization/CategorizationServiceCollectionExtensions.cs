@@ -21,6 +21,7 @@ public static class CategorizationServiceCollectionExtensions
         services.AddScoped<CategoryCandidateSelector>();
         services.AddScoped<AutoApplyPolicy>();
         services.AddScoped<YnabCategorizationProcessor>();
+        services.AddScoped<ManualTransactionResolutionService>();
         return services;
     }
 }

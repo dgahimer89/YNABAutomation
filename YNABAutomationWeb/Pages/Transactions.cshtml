@@ -1,0 +1,54 @@
+@page "/Transactions"
+@model YNABAutomationWeb.Pages.TransactionsModel
+@{
+    ViewData["Title"] = "Pending Transactions";
+}
+<h1>Pending Transactions</h1>
+@if (Model.Message is not null)
+{
+    <p class="message">@Model.Message</p>
+}
+@if (Model.Transactions.Count == 0)
+{
+    <p>No transactions require review.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>YNAB transaction ID</th>
+                <th>Date</th>
+                <th>Payee</th>
+                <th>Normalized payee</th>
+                <th>Amount</th>
+                <th>Direction</th>
+                <th>Account</th>
+                <th>Memo</th>
+                <th>Status</th>
+                <th>First seen</th>
+                <th>Last seen</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var transaction in Model.Transactions)
+        {
+            <tr>
+                <td>@transaction.YnabTransactionId</td>
+                <td>@transaction.TransactionDate</td>
+                <td>@transaction.PayeeName</td>
+                <td>@transaction.NormalizedPayee</td>
+                <td>@((transaction.Amount / 1000m).ToString("C"))</td>
+                <td>@transaction.Direction</td>
+                <td>@transaction.AccountName</td>
+                <td>@transaction.Memo</td>
+                <td>@transaction.Status</td>
+                <td>@transaction.FirstSeenAt.UtcDateTime.ToString("u")</td>
+                <td>@transaction.LastSeenAt.UtcDateTime.ToString("u")</td>
+                <td><a asp-page="/Transactions/Resolve" asp-route-id="@transaction.YnabTransactionId">Resolve</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

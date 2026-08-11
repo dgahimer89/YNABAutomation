@@ -50,12 +50,25 @@ public sealed class YnabApiClient(
         return await ReadResponseAsync<TransactionsResponse>(response, cancellationToken);
     }
 
+    public async Task<TransactionResponse> GetTransactionAsync(
+        string transactionId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(transactionId);
+
+        var planId = await GetPlanIdAsync(cancellationToken);
+        using var response = await _httpClient.GetAsync(
+            $"plans/{planId}/transactions/{Uri.EscapeDataString(transactionId)}",
+            cancellationToken);
+        return await ReadResponseAsync<TransactionResponse>(response, cancellationToken);
+    }
+
     public async Task<CategoriesResponse> GetCategoriesAsync(
         CancellationToken cancellationToken = default)
     {
         var planId = await GetPlanIdAsync(cancellationToken);
         using var response = await _httpClient.GetAsync(
-            $"plans/{planId}/categories?last_knowledge_of_server=false", cancellationToken);
+            $"plans/{planId}/categories", cancellationToken);
         return await ReadResponseAsync<CategoriesResponse>(response, cancellationToken);
     }
 

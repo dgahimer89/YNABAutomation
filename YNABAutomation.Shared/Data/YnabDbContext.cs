@@ -38,6 +38,9 @@ public sealed class YnabDbContext(DbContextOptions<YnabDbContext> options) : DbC
             entity.Property(decision => decision.RuleSource).HasConversion<string>().HasMaxLength(32);
             entity.Property(decision => decision.Status).HasConversion<string>().HasMaxLength(32);
             entity.HasIndex(decision => new { decision.NormalizedPayee, decision.Direction, decision.SelectedCategoryId });
+            entity.HasIndex(decision => decision.ProcessedYnabTransactionId)
+                .IsUnique()
+                .HasFilter("\"IsManualObservation\" = true AND \"Status\" = 'ManualApplied'");
             entity.Property(decision => decision.Consistency).HasPrecision(5, 4);
             entity.Property(decision => decision.Reason).HasMaxLength(2000);
             entity.HasOne(decision => decision.ProcessingRun)

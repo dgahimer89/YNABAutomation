@@ -1,0 +1,55 @@
+@page "/Rules"
+@model YNABAutomationWeb.Pages.RulesModel
+@{
+    ViewData["Title"] = "Merchant Rules";
+}
+<h1>Merchant Rules</h1>
+@if (Model.Rules.Count == 0)
+{
+    <p>No explicit merchant rules have been created.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Normalized merchant</th>
+                <th>Direction</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var rule in Model.Rules)
+        {
+            <tr>
+                <td>@rule.NormalizedPayee</td>
+                <td>@rule.Direction</td>
+                <td>@rule.CategoryName</td>
+                <td>@(rule.IsEnabled ? "Enabled" : "Disabled")</td>
+                <td>
+                    @if (rule.IsEnabled)
+                    {
+                        <form class="inline" method="post" asp-page-handler="Disable">
+                            <input type="hidden" name="RuleId" value="@rule.Id" />
+                            <button type="submit">Disable</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <form class="inline" method="post" asp-page-handler="Enable">
+                            <input type="hidden" name="RuleId" value="@rule.Id" />
+                            <button type="submit">Enable</button>
+                        </form>
+                    }
+                    <form class="inline" method="post" asp-page-handler="Delete">
+                        <input type="hidden" name="RuleId" value="@rule.Id" />
+                        <button type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

@@ -1,0 +1,61 @@
+@page "/Transactions/Resolve/{id}"
+@model YNABAutomationWeb.Pages.Transactions.ResolveModel
+@{
+    ViewData["Title"] = "Resolve Transaction";
+}
+<h1>Resolve Transaction</h1>
+@if (Model.Message is not null)
+{
+    <p class="message">@Model.Message</p>
+}
+@if (Model.Transaction is not null)
+{
+    <dl>
+        <dt>YNAB transaction ID</dt><dd>@Model.Transaction.YnabTransactionId</dd>
+        <dt>Date</dt><dd>@Model.Transaction.TransactionDate</dd>
+        <dt>Original payee</dt><dd>@Model.Transaction.PayeeName</dd>
+        <dt>Normalized payee</dt><dd>@Model.Transaction.NormalizedPayee</dd>
+        <dt>Amount</dt><dd>@((Model.Transaction.Amount / 1000m).ToString("C"))</dd>
+        <dt>Direction</dt><dd>@Model.Transaction.Direction</dd>
+        <dt>Account</dt><dd>@Model.Transaction.AccountName</dd>
+        <dt>Memo</dt><dd>@Model.Transaction.Memo</dd>
+        <dt>Inflow</dt><dd>@Model.Transaction.IsInflow</dd>
+        <dt>Transfer</dt><dd>@Model.Transaction.IsTransfer</dd>
+        <dt>Status</dt><dd>@Model.Transaction.Status</dd>
+        <dt>First seen</dt><dd>@Model.Transaction.FirstSeenAt.UtcDateTime.ToString("u")</dd>
+        <dt>Last seen</dt><dd>@Model.Transaction.LastSeenAt.UtcDateTime.ToString("u")</dd>
+    </dl>
+
+    @if (Model.ManualHistory.Count > 0)
+    {
+        <h2>Historical categorization</h2>
+        <ul>
+        @foreach (var decision in Model.ManualHistory)
+        {
+            <li>@decision.SelectedCategoryId on @decision.CreatedAt.UtcDateTime.ToString("u") (@decision.Reason)</li>
+        }
+        </ul>
+    }
+
+    @if (Model.Transaction.Status == TransactionProcessingStatus.ReviewRequired)
+    {
+        <form method="post">
+            <div asp-validation-summary="ModelOnly"></div>
+            <label asp-for="SelectedCategoryId">Category
+                <select asp-for="SelectedCategoryId">
+                    <option value="">Select a category</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                </select>
+            </label>
+            <label>
+                <input asp-for="AlwaysCategorizeMerchant" />
+                Always categorize this merchant this way
+            </label>
+            <button type="submit">Categorize</button>
+        </form>
+    }
+}
+<p><a asp-page="/Transactions">Back</a></p>

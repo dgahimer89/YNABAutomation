@@ -93,7 +93,13 @@ public sealed class YnabCategorizationProcessor(
         if (!policy.CanAutoApply(candidate, out var reason))
         {
             local.Status = TransactionProcessingStatus.ReviewRequired;
-            AddDecision(run, local, candidate, CategorizationDecisionStatus.ReviewRequired, candidate.SampleSize, candidate.Consistency, reason);
+            if (!local.Decisions.Any(decision =>
+                decision.Status == CategorizationDecisionStatus.ReviewRequired &&
+                decision.SelectedCategoryId == candidate.CategoryId &&
+                decision.Reason == reason))
+            {
+                AddDecision(run, local, candidate, CategorizationDecisionStatus.ReviewRequired, candidate.SampleSize, candidate.Consistency, reason);
+            }
             run.ReviewCount++;
             return;
         }
@@ -163,20 +169,44 @@ public sealed class YnabCategorizationProcessor(
 
             try
             {
-                await ynab.UpdateTransactionAsync(
-                    new UpdateTransactionCategoryRequest(
-                        update.ProcessedYnabTransaction.YnabTransactionId.ToString(), update.CategoryId),
+                var current = await ynab.GetTransactionAsync(
+                    update.ProcessedYnabTransaction.YnabTransactionId,
                     cancellationToken);
+                if (current.Data.Transaction.CategoryId is Guid currentCategoryId)
+                {
+                    update.Status = PendingUpdateStatus.Succeeded;
+                    update.CompletedAt = DateTimeOffset.UtcNow;
+                    update.ProcessedYnabTransaction.Status = TransactionProcessingStatus.Applied;
+                    update.ProcessedYnabTransaction.CategorizedAt = update.CompletedAt;
+                    update.LastError = currentCategoryId == update.CategoryId
+                        ? null
+                        : "Transaction was categorized externally.";
+                }
+                else
+                {
+                    await ynab.UpdateTransactionAsync(
+                        new UpdateTransactionCategoryRequest(
+                            update.ProcessedYnabTransaction.YnabTransactionId, update.CategoryId),
+                        cancellationToken);
+                    update.Status = PendingUpdateStatus.Succeeded;
+                    update.CompletedAt = DateTimeOffset.UtcNow;
+                    update.ProcessedYnabTransaction.Status = TransactionProcessingStatus.Applied;
+                    update.ProcessedYnabTransaction.CategorizedAt = update.CompletedAt;
+                    update.LastError = null;
+                }
                 update.Status = PendingUpdateStatus.Succeeded;
-                update.CompletedAt = DateTimeOffset.UtcNow;
-                update.ProcessedYnabTransaction.Status = TransactionProcessingStatus.Applied;
-                update.ProcessedYnabTransaction.CategorizedAt = update.CompletedAt;
                 var decision = update.ProcessedYnabTransaction.Decisions
                     .OrderByDescending(item => item.CreatedAt)
                     .FirstOrDefault(item => item.SelectedCategoryId == update.CategoryId);
                 if (decision is not null)
                 {
-                    decision.Status = CategorizationDecisionStatus.AutoApplied;
+                    decision.Status = update.LastError is null
+                        ? CategorizationDecisionStatus.AutoApplied
+                        : CategorizationDecisionStatus.Skipped;
+                    if (update.LastError is not null)
+                    {
+                        decision.Reason = update.LastError;
+                    }
                 }
                 update.Attempts++;
                 update.LastAttemptAt = update.CompletedAt;
@@ -194,7 +224,7 @@ public sealed class YnabCategorizationProcessor(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static void AddDecision(
+    private void AddDecision(
         ProcessingRun run,
         ProcessedYnabTransaction transaction,
         CategoryCandidate? candidate,
@@ -203,11 +233,11 @@ public sealed class YnabCategorizationProcessor(
         decimal? consistency,
         string reason)
     {
-        transaction.Decisions.Add(new CategorizationDecision
+        var decision = new CategorizationDecision
         {
             Id = Guid.NewGuid(),
             ProcessingRunId = run.Id,
-            ProcessedYnabTransaction = transaction,
+            ProcessedYnabTransactionId = transaction.Id,
             NormalizedPayee = transaction.NormalizedPayee,
             Direction = transaction.Direction,
             SelectedCategoryId = candidate?.CategoryId,
@@ -217,6 +247,9 @@ public sealed class YnabCategorizationProcessor(
             Consistency = consistency,
             Reason = reason,
             CreatedAt = DateTimeOffset.UtcNow
-        });
+        };
+
+        db.CategorizationDecisions.Add(decision);
+        transaction.Decisions.Add(decision);
     }
 }
