@@ -22,14 +22,30 @@ public sealed class ManualTransactionResolutionService(
     YnabDbContext db,
     IYnabApiClient ynab)
 {
-    public async Task<IReadOnlyList<Category>> GetValidCategoriesAsync(
+    public async Task<IReadOnlyList<CategoryGroup>> GetValidCategoryGroupsAsync(
         CancellationToken cancellationToken = default)
     {
         var response = await ynab.GetCategoriesAsync(cancellationToken);
         return response.Data.CategoryGroups
             .Where(group => !group.Hidden && !group.Deleted)
+            .Select(group => new CategoryGroup
+            {
+                Id = group.Id,
+                Name = group.Name,
+                Categories = group.Categories
+                    .Where(category => !category.Hidden && !category.Deleted)
+                    .ToArray()
+            })
+            .Where(group => group.Categories.Count > 0)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<Category>> GetValidCategoriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var groups = await GetValidCategoryGroupsAsync(cancellationToken);
+        return groups
             .SelectMany(group => group.Categories)
-            .Where(category => !category.Hidden && !category.Deleted)
             .OrderBy(category => category.Name)
             .ToArray();
     }

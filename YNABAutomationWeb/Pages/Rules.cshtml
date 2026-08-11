@@ -3,13 +3,47 @@
 @{
     ViewData["Title"] = "Merchant Rules";
 }
-<h1>Merchant Rules</h1>
+<style>
+    .rules-page__header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+    .rules-page__header h1 { margin: 0; font-size: clamp(1.75rem, 3vw, 2.25rem); }
+    .rules-page__header p { margin: .4rem 0 0; color: #5d6878; }
+    .rules-page__count { margin: 0; padding: .45rem .75rem; border-radius: 999px; background: #e9efff; color: #2546a0; font-weight: 600; white-space: nowrap; }
+    .rules-page__card { overflow: hidden; border-radius: .75rem; box-shadow: 0 .25rem 1rem rgb(23 32 51 / 8%); background: #fff; }
+    .rules-page__table-container { overflow-x: auto; }
+    .rules-page table { width: 100%; min-width: 46rem; margin: 0; border: 0; border-collapse: collapse; }
+    .rules-page th, .rules-page td { border: 0; padding: .85rem 1rem; text-align: left; vertical-align: middle; }
+    .rules-page th { position: sticky; top: 0; z-index: 1; background: #172033; color: #fff; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+    .rules-page tbody tr:nth-child(odd) { background: #fff; }
+    .rules-page tbody tr:nth-child(even) { background: #f5f8fc; }
+    .rules-page tbody tr:hover { background: #e8f0ff; }
+    .rules-page__status { display: inline-block; padding: .25rem .55rem; border-radius: 999px; font-size: .8rem; font-weight: 700; }
+    .rules-page__status--enabled { background: #dcf7e7; color: #126135; }
+    .rules-page__status--disabled { background: #eceff3; color: #526070; }
+    .rules-page__actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+    .rules-page__actions button { padding: .45rem .7rem; border: 1px solid #b9c5d5; border-radius: .35rem; background: #fff; color: #2546a0; cursor: pointer; font-size: .9rem; font-weight: 600; }
+    .rules-page__actions button:hover { border-color: #2546a0; background: #e9efff; }
+    .rules-page__actions .rules-page__delete { border-color: #e8b4b4; color: #a12626; }
+    .rules-page__actions .rules-page__delete:hover { border-color: #b52a2a; background: #fff0f0; }
+    .rules-page__empty { padding: 1.5rem; border: 1px dashed #b9c5d5; border-radius: .75rem; color: #5d6878; background: #fafcff; }
+    @@media (max-width: 40rem) { .rules-page__header { align-items: start; flex-direction: column; } }
+</style>
+
+<section class="rules-page" aria-labelledby="rules-heading">
+    <div class="rules-page__header">
+        <div>
+            <h1 id="rules-heading">Merchant Rules</h1>
+            <p>Manage saved categorization decisions for recognized merchants.</p>
+        </div>
+        <p class="rules-page__count">@Model.Rules.Count rules</p>
+    </div>
 @if (Model.Rules.Count == 0)
 {
-    <p>No explicit merchant rules have been created.</p>
+    <p class="rules-page__empty">No explicit merchant rules have been created.</p>
 }
 else
 {
+    <div class="rules-page__card">
+    <div class="rules-page__table-container" tabindex="0" aria-label="Merchant rules table">
     <table>
         <thead>
             <tr>
@@ -27,8 +61,8 @@ else
                 <td>@rule.NormalizedPayee</td>
                 <td>@rule.Direction</td>
                 <td>@rule.CategoryName</td>
-                <td>@(rule.IsEnabled ? "Enabled" : "Disabled")</td>
-                <td>
+                <td><span class="rules-page__status @(rule.IsEnabled ? "rules-page__status--enabled" : "rules-page__status--disabled")">@(rule.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td class="rules-page__actions">
                     @if (rule.IsEnabled)
                     {
                         <form class="inline" method="post" asp-page-handler="Disable">
@@ -45,11 +79,14 @@ else
                     }
                     <form class="inline" method="post" asp-page-handler="Delete">
                         <input type="hidden" name="RuleId" value="@rule.Id" />
-                        <button type="submit">Delete</button>
+                        <button class="rules-page__delete" type="submit">Delete</button>
                     </form>
                 </td>
             </tr>
         }
         </tbody>
     </table>
+    </div>
+    </div>
 }
+</section>

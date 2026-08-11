@@ -7,6 +7,6 @@ public sealed class IndexModel : PageModel
 {
     public IActionResult OnGet()
     {
-        return RedirectToPage("/Transactions");
+        return LocalRedirect("~/Transactions");
     }
 }

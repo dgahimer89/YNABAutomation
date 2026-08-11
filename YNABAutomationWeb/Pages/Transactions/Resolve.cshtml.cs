@@ -21,6 +21,7 @@ public sealed class ResolveModel(
     public bool AlwaysCategorizeMerchant { get; set; }
 
     public ProcessedYnabTransaction? Transaction { get; private set; }
+    public IReadOnlyList<CategoryGroup> CategoryGroups { get; private set; } = [];
     public IReadOnlyList<Category> Categories { get; private set; } = [];
     public IReadOnlyList<CategorizationDecision> ManualHistory { get; private set; } = [];
     public string? Message { get; private set; }
@@ -53,7 +54,7 @@ public sealed class ResolveModel(
         Message = outcome.Message;
         if (outcome.Result is ManualResolutionResult.Applied or ManualResolutionResult.AlreadyResolved)
         {
-            return RedirectToPage("/Transactions", new { message = outcome.Message });
+            return RedirectToPage("/Transactions/Transactions", new { message = outcome.Message });
         }
 
         await LoadAsync(cancellationToken);
@@ -66,7 +67,8 @@ public sealed class ResolveModel(
             .AsNoTracking()
             .Include(transaction => transaction.Decisions)
             .SingleOrDefaultAsync(transaction => transaction.YnabTransactionId == Id, cancellationToken);
-        Categories = await resolutionService.GetValidCategoriesAsync(cancellationToken);
+        CategoryGroups = await resolutionService.GetValidCategoryGroupsAsync(cancellationToken);
+        Categories = CategoryGroups.SelectMany(group => group.Categories).ToArray();
         ManualHistory = Transaction?.Decisions
             .Where(decision => decision.IsManualObservation && decision.Status == CategorizationDecisionStatus.ManualApplied)
             .OrderByDescending(decision => decision.CreatedAt)

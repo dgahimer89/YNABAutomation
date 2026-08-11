@@ -1,0 +1,106 @@
+@page "/Transactions"
+@model YNABAutomationWeb.Pages.TransactionsModel
+@{
+    ViewData["Title"] = "Pending Transactions";
+}
+<style>
+    .transactions-page { max-width: 100%; }
+    .transactions-page__header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+    .transactions-page__header h1 { margin: 0; color: #172033; font-size: clamp(1.75rem, 3vw, 2.25rem); }
+    .transactions-page__header p { margin: .4rem 0 0; color: #5d6878; }
+    .transactions-page__count { margin: 0; padding: .45rem .75rem; border-radius: 999px; background: #e9efff; color: #2546a0; font-weight: 600; white-space: nowrap; }
+    .transactions-page__card { overflow: hidden; border-radius: .75rem; box-shadow: 0 .25rem 1rem rgb(23 32 51 / 8%); background: #fff; }
+    .transactions-page__table-container { overflow-x: auto; }
+    .transactions-page table { width: 100%; min-width: 74rem; margin: 0; border: 0; border-collapse: collapse; }
+    .transactions-page th, .transactions-page td { border: 0; padding: .85rem 1rem; text-align: left; vertical-align: middle; }
+    .transactions-page th { position: sticky; top: 0; z-index: 1; background: #172033; color: #fff; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+    .transactions-page tbody tr:nth-child(odd) { background: #fff; }
+    .transactions-page tbody tr:nth-child(even) { background: #f5f8fc; }
+    .transactions-page tbody tr:hover { background: #e8f0ff; }
+    .transactions-page td:nth-child(4) { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; white-space: nowrap; }
+    .transactions-page select { width: 100%; min-width: 12rem; padding: .45rem .55rem; border: 1px solid #b9c5d5; border-radius: .35rem; background: #fff; color: #172033; }
+    .transactions-page__actions { display: flex; justify-content: flex-end; padding: 1rem; background: #fafcff; }
+    .transactions-page__actions button { padding: .65rem 1rem; border: 0; border-radius: .4rem; background: #2952cc; color: #fff; cursor: pointer; font-weight: 600; }
+    .transactions-page__actions button:hover { background: #1f42aa; }
+    .transactions-page__empty { padding: 1.5rem; border: 1px dashed #b9c5d5; border-radius: .75rem; color: #5d6878; background: #fafcff; }
+    @@media (max-width: 40rem) { .transactions-page__header { align-items: start; flex-direction: column; } }
+</style>
+
+<section class="transactions-page" aria-labelledby="transactions-heading">
+    <div class="transactions-page__header">
+        <div>
+            <h1 id="transactions-heading">Pending Transactions</h1>
+            <p>Review and categorize the transactions that need your attention.</p>
+        </div>
+        <p class="transactions-page__count">@Model.Transactions.Count pending</p>
+    </div>
+@if (Model.Message is not null)
+{
+    <p class="message">@Model.Message</p>
+}
+@if (Model.Transactions.Count == 0)
+{
+    <p class="transactions-page__empty">No transactions require review.</p>
+}
+else
+{
+    <form method="post" asp-page-handler="BulkCategorize">
+        <div asp-validation-summary="ModelOnly"></div>
+
+        <div class="transactions-page__card">
+        <div class="transactions-page__table-container" tabindex="0" aria-label="Pending transactions table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Payee</th>
+                    <th>Normalized payee</th>
+                    <th>Amount</th>
+                    <th>Direction</th>
+                    <th>Account</th>
+                    <th>Memo</th>
+                    <th>Category</th>
+                    <th>First seen</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var transaction in Model.Transactions)
+            {
+                var selectedCategoryId = Model.CategorySelections.GetValueOrDefault(transaction.YnabTransactionId);
+                <tr>
+                    <td>@transaction.TransactionDate</td>
+                    <td>@transaction.PayeeName</td>
+                    <td>@transaction.NormalizedPayee</td>
+                    <td>@((transaction.Amount / 1000m).ToString("C"))</td>
+                    <td>@transaction.Direction</td>
+                    <td>@transaction.AccountName</td>
+                    <td>@transaction.Memo</td>
+                    <td>
+                        <select name="CategorySelections[@transaction.YnabTransactionId]" aria-label="Category for @transaction.PayeeName">
+                            <option value="">Select a category</option>
+                            @foreach (var group in Model.CategoryGroups)
+                            {
+                                <optgroup label="@group.Name">
+                                    @foreach (var category in group.Categories)
+                                    {
+                                        <option value="@category.Id" selected="@(selectedCategoryId == category.Id.ToString() ? "selected" : null)">@category.Name</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </td>
+                    <td>@transaction.FirstSeenAt.UtcDateTime.ToString("u")</td>
+                    <td><a asp-page="/Transactions/Resolve" asp-route-id="@transaction.YnabTransactionId">Resolve</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        </div>
+        <div class="transactions-page__actions">
+        <button type="submit">Categorize selected rows</button>
+        </div>
+        </div>
+    </form>
+}
+</section>
