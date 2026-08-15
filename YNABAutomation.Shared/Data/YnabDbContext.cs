@@ -10,6 +10,7 @@ public sealed class YnabDbContext(DbContextOptions<YnabDbContext> options) : DbC
     public DbSet<CategorizationDecision> CategorizationDecisions => Set<CategorizationDecision>();
     public DbSet<MerchantRule> MerchantRules => Set<MerchantRule>();
     public DbSet<PendingCategoryUpdate> PendingCategoryUpdates => Set<PendingCategoryUpdate>();
+    public DbSet<AiCategorizationDecision> AiCategorizationDecisions => Set<AiCategorizationDecision>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -71,6 +72,23 @@ public sealed class YnabDbContext(DbContextOptions<YnabDbContext> options) : DbC
             entity.HasOne(update => update.ProcessedYnabTransaction)
                 .WithMany(transaction => transaction.PendingUpdates)
                 .HasForeignKey(update => update.ProcessedYnabTransactionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AiCategorizationDecision>(entity =>
+        {
+            entity.HasKey(decision => decision.Id);
+            entity.HasIndex(decision => new { decision.ProcessedYnabTransactionId, decision.CreatedAt });
+            entity.Property(decision => decision.Outcome).HasConversion<string>().HasMaxLength(32);
+            entity.Property(decision => decision.Confidence).HasPrecision(5, 4);
+            entity.Property(decision => decision.Reason).HasMaxLength(2000);
+            entity.Property(decision => decision.FailureReason).HasMaxLength(2000);
+            entity.Property(decision => decision.Model).HasMaxLength(200);
+            entity.Property(decision => decision.ProposedCategoryName).HasMaxLength(500);
+            entity.Property(decision => decision.AlternativeCategoryName).HasMaxLength(500);
+            entity.HasOne(decision => decision.ProcessedYnabTransaction)
+                .WithMany(transaction => transaction.AiDecisions)
+                .HasForeignKey(decision => decision.ProcessedYnabTransactionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

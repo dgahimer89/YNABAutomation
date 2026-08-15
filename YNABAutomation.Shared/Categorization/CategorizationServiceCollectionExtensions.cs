@@ -16,12 +16,28 @@ public static class CategorizationServiceCollectionExtensions
             .Validate(options => options.MinimumLearnedConsistency is >= 0 and <= 1,
                 "Categorization:MinimumLearnedConsistency must be between zero and one.")
             .ValidateOnStart();
+        services.AddOptions<OpenAiOptions>()
+            .Bind(configuration.GetSection(OpenAiOptions.SectionName))
+            .Validate(options => options.AutoApplyConfidenceThreshold is >= 0 and <= 1,
+                "OpenAI:AutoApplyConfidenceThreshold must be between zero and one.")
+            .Validate(options => options.MaximumHistoricalObservations > 0,
+                "OpenAI:MaximumHistoricalObservations must be greater than zero.")
+            .ValidateOnStart();
         services.AddSingleton<IProposedChangeWriter, ConsoleProposedChangeWriter>();
         services.AddSingleton<PayeeNormalizer>();
         services.AddScoped<CategoryCandidateSelector>();
         services.AddScoped<AutoApplyPolicy>();
         services.AddScoped<YnabCategorizationProcessor>();
         services.AddScoped<ManualTransactionResolutionService>();
+        var openAiOptions = configuration.GetSection(OpenAiOptions.SectionName).Get<OpenAiOptions>() ?? new();
+        if (string.IsNullOrWhiteSpace(openAiOptions.ApiKey))
+        {
+            services.AddSingleton<IAiCategorizer, DisabledAiCategorizer>();
+        }
+        else
+        {
+            services.AddSingleton<IAiCategorizer>(new OpenAiCategorizer(openAiOptions));
+        }
         return services;
     }
 }

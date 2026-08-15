@@ -29,6 +29,12 @@ Explicit merchant rules are stored in `MerchantRules` with `IsExplicit=true`, a 
 
 The processor persists the transaction, decision, processing run, and pending update before calling YNAB. Pending or failed updates are retried on the next startup, which handles a successful remote update followed by a local database failure without requiring categorized transactions to be fetched. On startup, EF Core applies all pending migrations with `Database.MigrateAsync()` before processing begins. A database previously created with `EnsureCreated` does not have migration history; for development, recreate that database or baseline it before using the migration-based startup.
 
+## OpenAI categorization
+
+When neither an explicit nor a sufficiently reliable learned rule resolves an eligible transaction, the processor can request a constrained OpenAI Responses API categorization. Set `OpenAI:ApiKey` through user secrets or an environment variable (for example, `OpenAI__ApiKey`); never commit the key. The default model is `gpt-5-mini`, and `OpenAI:AutoApplyConfidenceThreshold` defaults to `0.95`.
+
+OpenAI receives only the current transaction details, a small relevant manual-history summary, and the currently allowed YNAB categories. Its structured response is rejected when it names a category outside that supplied list. Every request outcome is stored in the AI decision audit history. High-confidence suggestions are revalidated against the current YNAB transaction before an automatic write; lower-confidence, ambiguous, invalid, or failed requests remain in the existing review workflow.
+
 Tests use MSTest and can be run with:
 
 `dotnet test YNABAutomationConsole.Tests/YNABAutomationConsole.Tests.csproj`

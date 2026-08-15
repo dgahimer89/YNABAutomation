@@ -25,7 +25,7 @@ public sealed class YnabApiClientTests
         Assert.AreEqual(42, result.Data.ServerKnowledge);
         Assert.AreEqual(HttpMethod.Get, handler.Request!.Method);
         Assert.AreEqual(
-            "/v1/plans/plan-1/categories?last_knowledge_of_server=false",
+            "/v1/plans/plan-1/categories?last_knowledge_of_server=0",
             handler.Request.RequestUri!.PathAndQuery);
         Assert.AreEqual("Bearer", handler.Request.Headers.Authorization!.Scheme);
         Assert.AreEqual("test-key", handler.Request.Headers.Authorization.Parameter);

@@ -24,6 +24,7 @@ public sealed class ResolveModel(
     public IReadOnlyList<CategoryGroup> CategoryGroups { get; private set; } = [];
     public IReadOnlyList<Category> Categories { get; private set; } = [];
     public IReadOnlyList<CategorizationDecision> ManualHistory { get; private set; } = [];
+    public AiCategorizationDecision? AiSuggestion { get; private set; }
     public string? Message { get; private set; }
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
@@ -66,6 +67,7 @@ public sealed class ResolveModel(
         Transaction = await db.ProcessedYnabTransactions
             .AsNoTracking()
             .Include(transaction => transaction.Decisions)
+            .Include(transaction => transaction.AiDecisions)
             .SingleOrDefaultAsync(transaction => transaction.YnabTransactionId == Id, cancellationToken);
         CategoryGroups = await resolutionService.GetValidCategoryGroupsAsync(cancellationToken);
         Categories = CategoryGroups.SelectMany(group => group.Categories).ToArray();
@@ -73,5 +75,13 @@ public sealed class ResolveModel(
             .Where(decision => decision.IsManualObservation && decision.Status == CategorizationDecisionStatus.ManualApplied)
             .OrderByDescending(decision => decision.CreatedAt)
             .ToArray() ?? [];
+        AiSuggestion = Transaction?.AiDecisions
+            .Where(decision => decision.Outcome == AiDecisionOutcome.Suggested)
+            .OrderByDescending(decision => decision.CreatedAt)
+            .FirstOrDefault();
+        if (SelectedCategoryId is null && AiSuggestion?.ProposedCategoryId is Guid suggestedCategoryId)
+        {
+            SelectedCategoryId = suggestedCategoryId;
+        }
     }
 }

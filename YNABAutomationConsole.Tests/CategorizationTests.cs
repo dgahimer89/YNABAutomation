@@ -93,4 +93,39 @@ public sealed class CategorizationTests
 
         Assert.AreEqual(TransactionType.Uncategorized, options.Type);
     }
+
+    [TestMethod]
+    public void OpenAiThreshold_ChangesAutomaticEligibility()
+    {
+        const decimal confidence = 0.94m;
+        var strict = new OpenAiOptions { AutoApplyConfidenceThreshold = 0.95m };
+        var permissive = new OpenAiOptions { AutoApplyConfidenceThreshold = 0.9m };
+
+        Assert.IsFalse(confidence >= strict.AutoApplyConfidenceThreshold);
+        Assert.IsTrue(confidence >= permissive.AutoApplyConfidenceThreshold);
+    }
+
+    [TestMethod]
+    public void OpenAiReviewRequest_PreventsAutomaticEligibility()
+    {
+        var result = new AiCategorizationResult(
+            Guid.NewGuid().ToString(),
+            1m,
+            "Ambiguous merchant.",
+            null,
+            true);
+
+        var canAutoApply = !result.RequiresReview && result.Confidence >= 0.95m;
+
+        Assert.IsFalse(canAutoApply);
+    }
+
+    [TestMethod]
+    public void OpenAiResult_CanRepresentAnExplicitUnresolvedSuggestion()
+    {
+        var result = new AiCategorizationResult(null, 0.2m, "Insufficient evidence.", null, true);
+
+        Assert.IsNull(result.CategoryId);
+        Assert.IsTrue(result.RequiresReview);
+    }
 }

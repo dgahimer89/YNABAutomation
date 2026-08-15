@@ -68,7 +68,7 @@ public sealed class YnabApiClient(
     {
         var planId = await GetPlanIdAsync(cancellationToken);
         using var response = await _httpClient.GetAsync(
-            $"plans/{planId}/categories", cancellationToken);
+            $"plans/{planId}/categories?last_knowledge_of_server=0", cancellationToken);
         return await ReadResponseAsync<CategoriesResponse>(response, cancellationToken);
     }
 

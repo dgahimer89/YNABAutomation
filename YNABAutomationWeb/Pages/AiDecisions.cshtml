@@ -1,0 +1,78 @@
+@page "/AiDecisions"
+@model YNABAutomationWeb.Pages.AiDecisionsModel
+@{
+    ViewData["Title"] = "AI Decisions";
+}
+<style>
+    .ai-decisions-page { max-width: 100%; }
+    .ai-decisions-page__header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+    .ai-decisions-page__header h1 { margin: 0; color: #172033; font-size: clamp(1.75rem, 3vw, 2.25rem); }
+    .ai-decisions-page__header p { margin: .4rem 0 0; color: #5d6878; }
+    .ai-decisions-page__count { margin: 0; padding: .45rem .75rem; border-radius: 999px; background: #e9efff; color: #2546a0; font-weight: 600; white-space: nowrap; }
+    .ai-decisions-page__card { overflow: hidden; border-radius: .75rem; box-shadow: 0 .25rem 1rem rgb(23 32 51 / 8%); background: #fff; }
+    .ai-decisions-page__table-container { overflow-x: auto; }
+    .ai-decisions-page table { width: 100%; min-width: 94rem; margin: 0; border: 0; border-collapse: collapse; }
+    .ai-decisions-page th, .ai-decisions-page td { border: 0; padding: .85rem 1rem; text-align: left; vertical-align: middle; }
+    .ai-decisions-page th { position: sticky; top: 0; z-index: 1; background: #172033; color: #fff; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+    .ai-decisions-page tbody tr:nth-child(odd) { background: #fff; }
+    .ai-decisions-page tbody tr:nth-child(even) { background: #f5f8fc; }
+    .ai-decisions-page tbody tr:hover { background: #e8f0ff; }
+    .ai-decisions-page td:nth-child(3), .ai-decisions-page td:nth-child(5) { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+    .ai-decisions-page__status { display: inline-block; padding: .25rem .55rem; border-radius: 999px; background: #e9efff; color: #2546a0; font-size: .8rem; font-weight: 700; white-space: nowrap; }
+    .ai-decisions-page__empty { padding: 1.5rem; border: 1px dashed #b9c5d5; border-radius: .75rem; color: #5d6878; background: #fafcff; }
+    .ai-decisions-page__pager { display: flex; gap: .75rem; margin-top: 1rem; }
+    .ai-decisions-page__pager a { padding: .45rem .7rem; border: 1px solid #b9c5d5; border-radius: .35rem; color: #2546a0; background: #fff; font-weight: 600; text-decoration: none; }
+    .ai-decisions-page__pager a:hover { border-color: #2546a0; background: #e9efff; }
+    @@media (max-width: 40rem) { .ai-decisions-page__header { align-items: start; flex-direction: column; } }
+</style>
+<section class="ai-decisions-page" aria-labelledby="ai-decisions-heading">
+    <div class="ai-decisions-page__header">
+        <div>
+            <h1 id="ai-decisions-heading">AI Decisions</h1>
+            <p>Review OpenAI categorization suggestions and their outcomes.</p>
+        </div>
+        <p class="ai-decisions-page__count">@Model.Decisions.Count decisions</p>
+    </div>
+    @if (Model.Decisions.Count == 0)
+    {
+        <p class="ai-decisions-page__empty">No AI categorization decisions have been recorded.</p>
+    }
+    else
+    {
+        <div class="ai-decisions-page__card">
+            <div class="ai-decisions-page__table-container" tabindex="0" aria-label="AI decisions table">
+                <table>
+                    <thead>
+                        <tr><th>Date</th><th>Payee</th><th>Amount</th><th>Suggestion</th><th>Confidence</th><th>Reason</th><th>Alternative</th><th>Model</th><th>Review</th><th>Threshold</th><th>Outcome</th><th>Final category</th></tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var decision in Model.Decisions)
+                    {
+                        <tr>
+                            <td><a asp-page="/Transactions/Resolve" asp-route-id="@decision.TransactionId">@decision.TransactionDate</a></td>
+                            <td>@decision.Payee</td>
+                            <td>@((decision.Amount / 1000m).ToString("C")) @decision.Direction</td>
+                            <td>@decision.SuggestedCategory</td>
+                            <td>@decision.Confidence?.ToString("P0")</td>
+                            <td>@decision.Reason @decision.FailureReason</td>
+                            <td>@decision.AlternativeCategory</td>
+                            <td>@decision.Model</td>
+                            <td>@decision.RequiresReview</td>
+                            <td>@decision.MetThreshold</td>
+                            <td><span class="ai-decisions-page__status">@decision.Outcome</span></td>
+                            <td>@decision.FinalCategoryId</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    @if (Model.PageNumber > 1 || Model.HasNextPage)
+    {
+        <nav class="ai-decisions-page__pager" aria-label="AI decision pagination">
+            @if (Model.PageNumber > 1) { <a asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a> }
+            @if (Model.HasNextPage) { <a asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a> }
+        </nav>
+    }
+</section>

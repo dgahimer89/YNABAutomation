@@ -66,6 +66,7 @@ public sealed class ManualTransactionResolutionService(
         var local = await db.ProcessedYnabTransactions
             .Include(transaction => transaction.Decisions)
             .Include(transaction => transaction.PendingUpdates)
+            .Include(transaction => transaction.AiDecisions)
             .SingleOrDefaultAsync(
                 transaction => transaction.YnabTransactionId == ynabTransactionId,
                 cancellationToken);
@@ -194,6 +195,18 @@ public sealed class ManualTransactionResolutionService(
         pending.LastError = null;
         local.Status = TransactionProcessingStatus.Applied;
         local.CategorizedAt = now;
+        var aiDecision = local.AiDecisions
+            .Where(item => item.Outcome == AiDecisionOutcome.Suggested)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefault();
+        if (aiDecision is not null)
+        {
+            aiDecision.FinalCategoryId = categoryId;
+            aiDecision.Outcome = aiDecision.ProposedCategoryId == categoryId
+                ? AiDecisionOutcome.AcceptedByUser
+                : AiDecisionOutcome.OverriddenByUser;
+            aiDecision.ResolvedAt = now;
+        }
 
         var decision = local.Decisions.FirstOrDefault(item =>
             item.SelectedCategoryId == categoryId &&

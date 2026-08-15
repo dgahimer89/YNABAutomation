@@ -93,6 +93,8 @@ public static class YnabServiceCollectionExtensions
     {
         var options = new YnabOptions();
         configuration.GetSection(YnabOptions.SectionName).Bind(options);
+        options.ApiKey = configuration["ynab_api_key"] ?? options.ApiKey;
+        options.PlanId = configuration["ynab_plan_id"] ?? options.PlanId;
         return options;
     }
 

@@ -32,13 +32,24 @@ public enum RuleSource
 {
     None,
     Explicit,
-    Learned
+    Learned,
+    Ai
 }
 
 public enum PendingUpdateStatus
 {
     Pending,
     Succeeded,
+    Failed
+}
+
+public enum AiDecisionOutcome
+{
+    Suggested,
+    AutoApplied,
+    AcceptedByUser,
+    OverriddenByUser,
+    RejectedInvalidOutput,
     Failed
 }
 
@@ -74,6 +85,29 @@ public sealed class ProcessedYnabTransaction
     public DateTimeOffset? CategorizedAt { get; set; }
     public ICollection<CategorizationDecision> Decisions { get; set; } = [];
     public ICollection<PendingCategoryUpdate> PendingUpdates { get; set; } = [];
+    public ICollection<AiCategorizationDecision> AiDecisions { get; set; } = [];
+}
+
+public sealed class AiCategorizationDecision
+{
+    public Guid Id { get; set; }
+    public Guid ProcessedYnabTransactionId { get; set; }
+    public ProcessedYnabTransaction? ProcessedYnabTransaction { get; set; }
+    public Guid? ProposedCategoryId { get; set; }
+    public string? ProposedCategoryName { get; set; }
+    public Guid? AlternativeCategoryId { get; set; }
+    public string? AlternativeCategoryName { get; set; }
+    public decimal? Confidence { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string Model { get; set; } = string.Empty;
+    public bool RequiresReview { get; set; }
+    public bool MetAutoApplyThreshold { get; set; }
+    public bool WasAutoApplied { get; set; }
+    public Guid? FinalCategoryId { get; set; }
+    public AiDecisionOutcome Outcome { get; set; }
+    public string? FailureReason { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
 }
 
 public sealed class CategorizationDecision

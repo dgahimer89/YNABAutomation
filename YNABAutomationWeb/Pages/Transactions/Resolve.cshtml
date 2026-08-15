@@ -68,6 +68,19 @@
         </section>
     }
 
+    @if (Model.AiSuggestion is not null)
+    {
+        <section class="resolve-page__card" aria-labelledby="ai-suggestion-heading">
+            <h2 id="ai-suggestion-heading">OpenAI suggestion</h2>
+            <dl class="resolve-page__details">
+                <div class="resolve-page__detail"><dt>Category</dt><dd>@Model.AiSuggestion.ProposedCategoryName</dd></div>
+                <div class="resolve-page__detail"><dt>Confidence</dt><dd>@(Model.AiSuggestion.Confidence?.ToString("P0"))</dd></div>
+                <div class="resolve-page__detail"><dt>Reason</dt><dd>@Model.AiSuggestion.Reason</dd></div>
+                <div class="resolve-page__detail"><dt>Alternative</dt><dd>@Model.AiSuggestion.AlternativeCategoryName</dd></div>
+            </dl>
+        </section>
+    }
+
     @if (Model.Transaction.Status == TransactionProcessingStatus.ReviewRequired)
     {
         <form method="post" class="resolve-page__card resolve-page__form">
