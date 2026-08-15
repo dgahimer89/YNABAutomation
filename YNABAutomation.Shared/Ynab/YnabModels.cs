@@ -75,6 +75,9 @@ public sealed class Account
 
     [JsonPropertyName("balance")]
     public long Balance { get; init; }
+
+    [JsonPropertyName("transfer_payee_id")]
+    public Guid? TransferPayeeId { get; init; }
 }
 
 public sealed class CategoriesResponse

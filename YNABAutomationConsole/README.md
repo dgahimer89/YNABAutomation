@@ -2,12 +2,10 @@
 
 The console application registers `IYnabApiClient` through asynchronous `AddYnabApi(...)`. The client uses the YNAB API at `https://api.ynab.com/v1/` and receives its bearer token through DI-backed `YnabOptions`; the API client does not read secrets directly. When no plan ID is configured, registration performs plan discovery before the service provider is built, so connection and plan-count errors occur during startup.
 
-Configure the existing user secret and a default plan ID in the development environment:
-
-- `ynab_api_key` - the YNAB bearer token.
-- `ynab_plan_id` - optional plan ID used by plan-scoped methods. If omitted, `AddYnabApi(...)` calls `GET /plans` during registration and uses the only available plan; it throws if the account has zero or multiple plans. YNAB values such as `last-used` may also be used when supported by the API.
-
-The options can also be supplied under the `Ynab` configuration section using `ApiKey`, `PlanId`, and `BaseUrl`. The root-level secret names above take precedence for the API key and plan ID. No secret values should be committed to source control.
+Configure the YNAB client under the `Ynab` configuration section using `ApiKey`,
+`PlanId`, and `BaseUrl`. `PlanId` is optional when the account has exactly one
+plan; `AddYnabApi(...)` performs `GET /plans` discovery during registration
+otherwise. No secret values should be committed to source control.
 
 The application registers `YnabDbContext` for PostgreSQL. Configure the database through the `ConnectionStrings:DefaultConnection` setting, for example:
 
@@ -38,3 +36,6 @@ OpenAI receives only the current transaction details, a small relevant manual-hi
 Tests use MSTest and can be run with:
 
 `dotnet test YNABAutomationConsole.Tests/YNABAutomationConsole.Tests.csproj`
+
+For AI-assisted maintenance, see the repository's [AI contributor guide](../.github/copilot-instructions.md),
+[architecture guide](../docs/architecture.md), and [development workflows](../docs/development-workflows.md).

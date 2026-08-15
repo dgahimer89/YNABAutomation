@@ -128,4 +128,63 @@ public sealed class CategorizationTests
         Assert.IsNull(result.CategoryId);
         Assert.IsTrue(result.RequiresReview);
     }
+
+    [TestMethod]
+    public void TransferMatcher_RequiresDifferentAccountsExactAmountsAndClearedSides()
+    {
+        var source = new Transaction
+        {
+            Id = "source",
+            AccountId = Guid.NewGuid(),
+            Date = new DateOnly(2026, 8, 10),
+            Amount = -500000,
+            Cleared = "cleared"
+        };
+        var counterpart = new Transaction
+        {
+            Id = "counterpart",
+            AccountId = Guid.NewGuid(),
+            Date = new DateOnly(2026, 8, 12),
+            Amount = 500000,
+            Cleared = "cleared"
+        };
+
+        Assert.AreEqual(1, TransferMatcher.FindMatches(source, [source, counterpart], 3).Count);
+        Assert.AreEqual(0, TransferMatcher.FindMatches(
+            source, [source, new Transaction
+            {
+                Id = counterpart.Id, AccountId = counterpart.AccountId, Date = counterpart.Date,
+                Amount = 499999, Cleared = counterpart.Cleared
+            }], 3).Count);
+        Assert.AreEqual(0, TransferMatcher.FindMatches(
+            source, [source, new Transaction
+            {
+                Id = counterpart.Id, AccountId = source.AccountId, Date = counterpart.Date,
+                Amount = counterpart.Amount, Cleared = counterpart.Cleared
+            }], 3).Count);
+        Assert.AreEqual(0, TransferMatcher.FindMatches(
+            source, [source, new Transaction
+            {
+                Id = counterpart.Id, AccountId = counterpart.AccountId, Date = counterpart.Date,
+                Amount = counterpart.Amount, Cleared = "uncleared"
+            }], 3).Count);
+    }
+
+    [TestMethod]
+    public void TransferMatcher_RejectsDatesOutsideConfiguredWindow()
+    {
+        var source = new Transaction
+        {
+            Id = "source", AccountId = Guid.NewGuid(), Date = new DateOnly(2026, 8, 10),
+            Amount = -500000, Cleared = "cleared"
+        };
+        var counterpart = new Transaction
+        {
+            Id = "counterpart", AccountId = Guid.NewGuid(), Date = new DateOnly(2026, 8, 14),
+            Amount = 500000, Cleared = "cleared"
+        };
+
+        Assert.AreEqual(0, TransferMatcher.FindMatches(source, [source, counterpart], 3).Count);
+        Assert.AreEqual(1, TransferMatcher.FindMatches(source, [source, counterpart], 4).Count);
+    }
 }

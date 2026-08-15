@@ -25,10 +25,14 @@ public sealed class YnabCategorizationProcessor(
     IOptions<CategorizationOptions> options,
     IOptions<OpenAiOptions> openAiOptions,
     IAiCategorizer aiCategorizer,
-    IProposedChangeWriter proposedChangeWriter)
+    IProposedChangeWriter proposedChangeWriter,
+    TransferReconciliationService? transferReconciliation = null)
 {
     private readonly CategorizationOptions _options = options.Value;
     private readonly OpenAiOptions _openAiOptions = openAiOptions.Value;
+    private readonly TransferReconciliationService _transferReconciliation =
+        transferReconciliation ?? new TransferReconciliationService(
+            db, ynab, Options.Create(new TransferOptions()));
 
     public async Task<CategorizationRunResult> ProcessAsync(CancellationToken cancellationToken = default)
     {
@@ -42,13 +46,28 @@ public sealed class YnabCategorizationProcessor(
         db.ProcessingRuns.Add(run);
         var aiFailureMessages = new List<string>();
 
+        var unapprovedTransactions = (await ynab.GetTransactionsAsync(
+            new GetTransactionsOptions { Type = TransactionType.Unapproved }, cancellationToken))
+            .Data.Transactions;
+        await ApproveEligibleTransactionsAsync(unapprovedTransactions, cancellationToken);
+        var allTransactions = (await ynab.GetTransactionsAsync(cancellationToken: cancellationToken))
+            .Data.Transactions;
         var response = await ynab.GetTransactionsAsync(
             new GetTransactionsOptions { Type = TransactionType.Uncategorized }, cancellationToken);
         run.FetchedCount = response.Data.Transactions.Count;
+        var accounts = (await ynab.GetPlansAsync(
+            new GetPlansOptions { IncludeAccounts = true }, cancellationToken))
+            .Data.Plans.SelectMany(plan => plan.Accounts).ToDictionary(account => account.Id);
 
         foreach (var transaction in response.Data.Transactions)
         {
-            await ProcessTransactionAsync(run, transaction, aiFailureMessages, cancellationToken);
+            if (IsReconciliationAdjustment(transaction))
+            {
+                continue;
+            }
+
+            await ProcessTransactionAsync(
+                run, transaction, allTransactions, accounts, aiFailureMessages, cancellationToken);
         }
 
         run.CompletedAt = DateTimeOffset.UtcNow;
@@ -66,6 +85,8 @@ public sealed class YnabCategorizationProcessor(
     private async Task ProcessTransactionAsync(
         ProcessingRun run,
         Transaction transaction,
+        IReadOnlyList<Transaction> allTransactions,
+        IReadOnlyDictionary<Guid, Account> accounts,
         ICollection<string> aiFailureMessages,
         CancellationToken cancellationToken)
     {
@@ -96,6 +117,12 @@ public sealed class YnabCategorizationProcessor(
         local.IsTransfer = eligibility.IsTransfer;
         local.Memo = transaction.Memo;
         local.AccountName = transaction.AccountName;
+
+        if (await _transferReconciliation.ProcessAsync(
+            transaction, allTransactions, local, run, accounts, cancellationToken))
+        {
+            return;
+        }
 
         if (local.Status == TransactionProcessingStatus.Applied)
         {
@@ -298,7 +325,9 @@ public sealed class YnabCategorizationProcessor(
                     return true;
                 }
 
-                await ynab.UpdateTransactionAsync(new UpdateTransactionCategoryRequest(transaction.Id, categoryId), cancellationToken);
+                await ynab.UpdateTransactionAsync(
+                    new UpdateTransactionCategoryRequest(
+                        transaction.Id, categoryId, IsCleared(transaction)), cancellationToken);
                 pending.Status = PendingUpdateStatus.Succeeded;
                 pending.CompletedAt = DateTimeOffset.UtcNow;
                 local.Status = TransactionProcessingStatus.Applied;
@@ -407,7 +436,8 @@ public sealed class YnabCategorizationProcessor(
             }
 
             await ynab.UpdateTransactionAsync(
-                new UpdateTransactionCategoryRequest(transaction.Id, candidate.CategoryId), cancellationToken);
+                new UpdateTransactionCategoryRequest(
+                    transaction.Id, candidate.CategoryId, IsCleared(transaction)), cancellationToken);
             pending.Status = PendingUpdateStatus.Succeeded;
             pending.CompletedAt = DateTimeOffset.UtcNow;
             local.Status = TransactionProcessingStatus.Applied;
@@ -416,6 +446,7 @@ public sealed class YnabCategorizationProcessor(
             run.AppliedCount++;
             await db.SaveChangesAsync(cancellationToken);
         }
+
         catch (Exception exception) when (exception is YnabApiException or HttpRequestException or TaskCanceledException)
         {
             pending.Status = PendingUpdateStatus.Failed;
@@ -428,6 +459,33 @@ public sealed class YnabCategorizationProcessor(
             await db.SaveChangesAsync(cancellationToken);
         }
     }
+
+    private async Task ApproveEligibleTransactionsAsync(
+        IReadOnlyList<Transaction> transactions,
+        CancellationToken cancellationToken)
+    {
+        var approvals = transactions
+            .Where(transaction => !transaction.Approved
+                && transaction.CategoryId is not null
+                && IsCleared(transaction)
+                && !IsReconciliationAdjustment(transaction))
+            .Select(transaction => UpdateTransactionsRequest.ById(
+                transaction.Id, null, approved: true))
+            .ToArray();
+        if (approvals.Length > 0)
+        {
+            await ynab.UpdateTransactionsAsync(approvals, cancellationToken);
+        }
+    }
+
+    private static bool IsCleared(Transaction transaction) =>
+        TransferMatcher.IsCleared(transaction);
+
+    private static bool IsReconciliationAdjustment(Transaction transaction) =>
+        string.Equals(
+            transaction.PayeeName,
+            "Reconciliation Balance Adjustment",
+            StringComparison.OrdinalIgnoreCase);
 
     private async Task RecoverPendingUpdatesAsync(CancellationToken cancellationToken)
     {

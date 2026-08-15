@@ -78,6 +78,23 @@ public sealed class YnabApiClientTests
     }
 
     [TestMethod]
+    public async Task UpdateTransactionsAsync_CanApproveWithoutChangingCategory()
+    {
+        var handler = new RecordingHandler(
+            HttpStatusCode.OK,
+            "{\"data\":{\"transaction_ids\":[\"transaction-1\"]}}");
+        var client = CreateClient(handler);
+
+        await client.UpdateTransactionsAsync(
+            [UpdateTransactionsRequest.ById("transaction-1", null, approved: true)]);
+
+        using var body = JsonDocument.Parse(handler.Body!);
+        var transaction = body.RootElement.GetProperty("transactions")[0];
+        Assert.IsFalse(transaction.TryGetProperty("category_id", out _));
+        Assert.IsTrue(transaction.GetProperty("approved").GetBoolean());
+    }
+
+    [TestMethod]
     public async Task ApiError_PreservesYnabErrorDetails()
     {
         var handler = new RecordingHandler(
@@ -159,7 +176,7 @@ public sealed class YnabApiClientTests
     private static IConfiguration CreateConfiguration()
     {
         var configuration = new ConfigurationManager();
-        configuration["ynab_api_key"] = "test-key";
+        configuration["Ynab:ApiKey"] = "test-key";
         return configuration;
     }
 

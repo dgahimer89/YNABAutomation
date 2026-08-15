@@ -23,11 +23,17 @@ public static class CategorizationServiceCollectionExtensions
             .Validate(options => options.MaximumHistoricalObservations > 0,
                 "OpenAI:MaximumHistoricalObservations must be greater than zero.")
             .ValidateOnStart();
+        services.AddOptions<TransferOptions>()
+            .Bind(configuration.GetSection(TransferOptions.SectionName))
+            .Validate(options => options.MatchingDateWindowDays >= 0,
+                "Transfers:MatchingDateWindowDays must not be negative.")
+            .ValidateOnStart();
         services.AddSingleton<IProposedChangeWriter, ConsoleProposedChangeWriter>();
         services.AddSingleton<PayeeNormalizer>();
         services.AddScoped<CategoryCandidateSelector>();
         services.AddScoped<AutoApplyPolicy>();
         services.AddScoped<YnabCategorizationProcessor>();
+        services.AddScoped<TransferReconciliationService>();
         services.AddScoped<ManualTransactionResolutionService>();
         var openAiOptions = configuration.GetSection(OpenAiOptions.SectionName).Get<OpenAiOptions>() ?? new();
         if (string.IsNullOrWhiteSpace(openAiOptions.ApiKey))

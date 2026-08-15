@@ -88,7 +88,9 @@ public sealed class YnabApiClient(
             {
                 Id = transaction.Id,
                 ImportId = transaction.ImportId,
-                CategoryId = transaction.CategoryId
+                CategoryId = transaction.CategoryId,
+                Approved = transaction.Approved,
+                PayeeId = transaction.PayeeId
             }).ToArray()
         };
 
@@ -106,7 +108,12 @@ public sealed class YnabApiClient(
 
         var body = new PutTransactionBody
         {
-            Transaction = new PutTransaction { CategoryId = transaction.CategoryId }
+            Transaction = new PutTransaction
+            {
+                CategoryId = transaction.CategoryId,
+                Approved = transaction.Approved,
+                PayeeId = transaction.PayeeId
+            }
         };
 
         var planId = await GetPlanIdAsync(cancellationToken);

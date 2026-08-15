@@ -11,6 +11,7 @@ public sealed class YnabDbContext(DbContextOptions<YnabDbContext> options) : DbC
     public DbSet<MerchantRule> MerchantRules => Set<MerchantRule>();
     public DbSet<PendingCategoryUpdate> PendingCategoryUpdates => Set<PendingCategoryUpdate>();
     public DbSet<AiCategorizationDecision> AiCategorizationDecisions => Set<AiCategorizationDecision>();
+    public DbSet<TransferCandidate> TransferCandidates => Set<TransferCandidate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -90,6 +91,20 @@ public sealed class YnabDbContext(DbContextOptions<YnabDbContext> options) : DbC
                 .WithMany(transaction => transaction.AiDecisions)
                 .HasForeignKey(decision => decision.ProcessedYnabTransactionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TransferCandidate>(entity =>
+        {
+            entity.HasKey(candidate => candidate.Id);
+            entity.HasIndex(candidate => candidate.YnabTransactionId).IsUnique();
+            entity.HasIndex(candidate => candidate.MatchedTransactionId)
+                .IsUnique()
+                .HasFilter("\"MatchedTransactionId\" IS NOT NULL");
+            entity.Property(candidate => candidate.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(candidate => candidate.PayeeName).HasMaxLength(500);
+            entity.Property(candidate => candidate.AccountName).HasMaxLength(500);
+            entity.Property(candidate => candidate.PlausibleMatchesJson).HasMaxLength(10000);
+            entity.Property(candidate => candidate.Reason).HasMaxLength(2000);
         });
     }
 }

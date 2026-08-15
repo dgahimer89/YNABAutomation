@@ -25,6 +25,7 @@ public sealed class ResolveModel(
     public IReadOnlyList<Category> Categories { get; private set; } = [];
     public IReadOnlyList<CategorizationDecision> ManualHistory { get; private set; } = [];
     public AiCategorizationDecision? AiSuggestion { get; private set; }
+    public TransferCandidate? TransferCandidate { get; private set; }
     public string? Message { get; private set; }
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
@@ -79,6 +80,10 @@ public sealed class ResolveModel(
             .Where(decision => decision.Outcome == AiDecisionOutcome.Suggested)
             .OrderByDescending(decision => decision.CreatedAt)
             .FirstOrDefault();
+        TransferCandidate = Transaction is null
+            ? null
+            : await db.TransferCandidates.AsNoTracking()
+                .SingleOrDefaultAsync(candidate => candidate.YnabTransactionId == Id, cancellationToken);
         if (SelectedCategoryId is null && AiSuggestion?.ProposedCategoryId is Guid suggestedCategoryId)
         {
             SelectedCategoryId = suggestedCategoryId;

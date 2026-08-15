@@ -161,7 +161,10 @@ public sealed class ManualTransactionResolutionService(
         try
         {
             await ynab.UpdateTransactionAsync(
-                new UpdateTransactionCategoryRequest(ynabTransactionId, categoryId),
+                new UpdateTransactionCategoryRequest(
+                    ynabTransactionId,
+                    categoryId,
+                    TransferMatcher.IsCleared(current.Data.Transaction)),
                 cancellationToken);
         }
         catch (Exception exception) when (exception is YnabApiException or HttpRequestException or TaskCanceledException)

@@ -105,7 +105,8 @@ public sealed class AiCategorizationProcessorTests
         public int GetTransactionCalls { get; private set; }
         public int UpdateCalls { get; private set; }
 
-        public Task<PlansResponse> GetPlansAsync(GetPlansOptions? options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PlansResponse> GetPlansAsync(GetPlansOptions? options = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PlansResponse { Data = new PlansData { Plans = [] } });
         public Task<TransactionsResponse> GetTransactionsAsync(GetTransactionsOptions? options = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(new TransactionsResponse { Data = new TransactionsData { Transactions = [_transaction] } });
         public Task<TransactionResponse> GetTransactionAsync(string transactionId, CancellationToken cancellationToken = default)

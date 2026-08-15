@@ -53,6 +53,15 @@ public enum AiDecisionOutcome
     Failed
 }
 
+public enum TransferCandidateStatus
+{
+    PendingMatch,
+    Matched,
+    ReviewRequired,
+    Repaired,
+    Expired
+}
+
 public sealed class ProcessingRun
 {
     public Guid Id { get; set; }
@@ -155,4 +164,23 @@ public sealed class PendingCategoryUpdate
     public string? LastError { get; set; }
     public Guid RequestId { get; set; }
     public byte[] RowVersion { get; set; } = [];
+}
+
+public sealed class TransferCandidate
+{
+    public Guid Id { get; set; }
+    public string YnabTransactionId { get; set; } = string.Empty;
+    public Guid AccountId { get; set; }
+    public string? AccountName { get; set; }
+    public DateOnly TransactionDate { get; set; }
+    public long Amount { get; set; }
+    public string? PayeeName { get; set; }
+    public bool Cleared { get; set; }
+    public bool ExistingYnabTransfer { get; set; }
+    public TransferCandidateStatus Status { get; set; }
+    public string? MatchedTransactionId { get; set; }
+    public string PlausibleMatchesJson { get; set; } = "[]";
+    public string Reason { get; set; } = string.Empty;
+    public DateTimeOffset FirstSeenAt { get; set; }
+    public DateTimeOffset LastSeenAt { get; set; }
 }

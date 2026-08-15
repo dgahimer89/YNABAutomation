@@ -40,7 +40,7 @@ public enum TransactionType
 
 public sealed class UpdateTransactionCategoryRequest
 {
-    public UpdateTransactionCategoryRequest(string transactionId, Guid? categoryId)
+    public UpdateTransactionCategoryRequest(string transactionId, Guid? categoryId, bool? approved = null, Guid? payeeId = null)
     {
         if (string.IsNullOrWhiteSpace(transactionId))
         {
@@ -49,11 +49,17 @@ public sealed class UpdateTransactionCategoryRequest
 
         TransactionId = transactionId;
         CategoryId = categoryId;
+        Approved = approved;
+        PayeeId = payeeId;
     }
 
     public string TransactionId { get; }
 
     public Guid? CategoryId { get; }
+
+    public bool? Approved { get; }
+
+    public Guid? PayeeId { get; }
 }
 
 public sealed class UpdateTransactionByImportIdRequest
@@ -79,7 +85,9 @@ public sealed class UpdateTransactionsRequest
     private UpdateTransactionsRequest(
         string? id,
         string? importId,
-        Guid? categoryId)
+        Guid? categoryId,
+        bool? approved = null,
+        Guid? payeeId = null)
     {
         if (string.IsNullOrWhiteSpace(id) == string.IsNullOrWhiteSpace(importId))
         {
@@ -89,6 +97,8 @@ public sealed class UpdateTransactionsRequest
         Id = id;
         ImportId = importId;
         CategoryId = categoryId;
+        Approved = approved;
+        PayeeId = payeeId;
     }
 
     public string? Id { get; }
@@ -97,11 +107,15 @@ public sealed class UpdateTransactionsRequest
 
     public Guid? CategoryId { get; }
 
-    public static UpdateTransactionsRequest ById(string id, Guid? categoryId) =>
-        new(id, null, categoryId);
+    public bool? Approved { get; }
 
-    public static UpdateTransactionsRequest ByImportId(string importId, Guid? categoryId) =>
-        new(null, importId, categoryId);
+    public Guid? PayeeId { get; }
+
+    public static UpdateTransactionsRequest ById(string id, Guid? categoryId, bool? approved = null, Guid? payeeId = null) =>
+        new(id, null, categoryId, approved, payeeId);
+
+    public static UpdateTransactionsRequest ByImportId(string importId, Guid? categoryId, bool? approved = null, Guid? payeeId = null) =>
+        new(null, importId, categoryId, approved, payeeId);
 }
 
 internal sealed class PatchTransactionsBody
@@ -121,7 +135,16 @@ internal sealed class PatchTransaction
     public string? ImportId { get; init; }
 
     [JsonPropertyName("category_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Guid? CategoryId { get; init; }
+
+    [JsonPropertyName("approved")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Approved { get; init; }
+
+    [JsonPropertyName("payee_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PayeeId { get; init; }
 }
 
 internal sealed class PutTransactionBody
@@ -134,6 +157,14 @@ internal sealed class PutTransaction
 {
     [JsonPropertyName("category_id")]
     public Guid? CategoryId { get; init; }
+
+    [JsonPropertyName("approved")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Approved { get; init; }
+
+    [JsonPropertyName("payee_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PayeeId { get; init; }
 }
 
 internal static class YnabRequestFormatting

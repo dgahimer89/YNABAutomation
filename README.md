@@ -78,3 +78,6 @@ Tests use MSTest:
 ```powershell
 dotnet test YNABAutomationConsole.Tests/YNABAutomationConsole.Tests.csproj
 ```
+
+For AI-assisted maintenance, see the [AI contributor guide](.github/copilot-instructions.md),
+[architecture guide](docs/architecture.md), and [development workflows](docs/development-workflows.md).
