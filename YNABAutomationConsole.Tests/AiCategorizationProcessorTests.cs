@@ -39,14 +39,14 @@ public sealed class AiCategorizationProcessorTests
     }
 
     [TestMethod]
-    public async Task HighConfidenceAiSuggestion_IsRevalidatedThenApplied()
+    public async Task HighConfidenceAiSuggestion_IsAppliedWithoutRecheck()
     {
         var categoryId = Guid.NewGuid();
         var (_, ynab, _, processor) = CreateProcessor(new AiCategorizationResult(categoryId.ToString(), .99m, "test", null, false), categoryId);
 
         var result = await processor.ProcessAsync();
 
-        Assert.AreEqual(1, ynab.GetTransactionCalls);
+        Assert.AreEqual(0, ynab.GetTransactionCalls);
         Assert.AreEqual(1, ynab.UpdateCalls);
         Assert.AreEqual(1, result.Applied);
     }
@@ -63,9 +63,40 @@ public sealed class AiCategorizationProcessorTests
         Assert.AreEqual(1, result.ReviewRequired);
     }
 
+    [TestMethod]
+    public async Task DateRangeDisabled_DoesNotFilterTransactionQuery()
+    {
+        var (_, ynab, _, processor) = CreateProcessor(
+            new AiCategorizationResult(Guid.NewGuid().ToString(), .94m, "test", null, false),
+            ynabOptions: new YnabOptions
+            {
+                UseDateRange = false,
+                SinceDate = new DateOnly(2026, 1, 1),
+                UntilDate = new DateOnly(2026, 1, 31)
+            });
+
+        await processor.ProcessAsync();
+
+        Assert.AreEqual(1, ynab.TransactionOptions.Count);
+        Assert.IsTrue(ynab.TransactionOptions[0]?.SinceDate is null && ynab.TransactionOptions[0]?.UntilDate is null);
+    }
+
+    [TestMethod]
+    public async Task ExcludedTransactions_AreNotRerun()
+    {
+        var (_, _, ai, processor) = CreateProcessor(
+            new AiCategorizationResult(Guid.NewGuid().ToString(), .99m, "test", null, false));
+
+        await processor.ProcessAsync(
+            new HashSet<string>(StringComparer.Ordinal) { "transaction-1" });
+
+        Assert.AreEqual(0, ai.Calls);
+    }
+
     private static (YnabDbContext Db, FakeYnab Ynab, FakeAi Ai, YnabCategorizationProcessor Processor) CreateProcessor(
         AiCategorizationResult aiResult,
-        Guid? allowedCategoryId = null)
+        Guid? allowedCategoryId = null,
+        YnabOptions? ynabOptions = null)
     {
         var db = new YnabDbContext(new DbContextOptionsBuilder<YnabDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
@@ -76,6 +107,7 @@ public sealed class AiCategorizationProcessorTests
             new AutoApplyPolicy(Options.Create(new CategorizationOptions())),
             Options.Create(new CategorizationOptions { DryRun = false }),
             Options.Create(new OpenAiOptions { AutoApplyConfidenceThreshold = .95m }),
+            Options.Create(ynabOptions ?? new YnabOptions()),
             ai, new NullProposedChangeWriter());
         return (db, ynab, ai, processor);
     }
@@ -104,11 +136,15 @@ public sealed class AiCategorizationProcessorTests
         };
         public int GetTransactionCalls { get; private set; }
         public int UpdateCalls { get; private set; }
+        public List<GetTransactionsOptions?> TransactionOptions { get; } = [];
 
         public Task<PlansResponse> GetPlansAsync(GetPlansOptions? options = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(new PlansResponse { Data = new PlansData { Plans = [] } });
-        public Task<TransactionsResponse> GetTransactionsAsync(GetTransactionsOptions? options = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new TransactionsResponse { Data = new TransactionsData { Transactions = [_transaction] } });
+        public Task<TransactionsResponse> GetTransactionsAsync(GetTransactionsOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            TransactionOptions.Add(options);
+            return Task.FromResult(new TransactionsResponse { Data = new TransactionsData { Transactions = [_transaction] } });
+        }
         public Task<TransactionResponse> GetTransactionAsync(string transactionId, CancellationToken cancellationToken = default)
         {
             GetTransactionCalls++;

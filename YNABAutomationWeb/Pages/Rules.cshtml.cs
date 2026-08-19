@@ -1,13 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using YNABAutomationConsole.Categorization;
 using YNABAutomationConsole.Data;
 using YNABAutomationConsole.Ynab;
 
 namespace YNABAutomationWeb.Pages;
 
-public sealed class RulesModel(YnabDbContext db, IYnabApiClient ynab) : PageModel
+public sealed class RulesModel(
+    YnabDbContext db,
+    IYnabApiClient ynab,
+    ILogger<RulesModel> logger) : PageModel
 {
     [BindProperty]
     public Guid RuleId { get; set; }
@@ -16,6 +20,7 @@ public sealed class RulesModel(YnabDbContext db, IYnabApiClient ynab) : PageMode
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        logger.LogInformation("Loading merchant rules.");
         await LoadAsync(cancellationToken);
     }
 
@@ -45,6 +50,7 @@ public sealed class RulesModel(YnabDbContext db, IYnabApiClient ynab) : PageMode
 
     private async Task SetEnabledAsync(bool enabled, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Setting merchant rule {RuleId} enabled={Enabled}.", RuleId, enabled);
         var rule = await db.MerchantRules.SingleOrDefaultAsync(item => item.Id == RuleId, cancellationToken);
         if (rule is not null)
         {

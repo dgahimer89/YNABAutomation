@@ -55,8 +55,8 @@ files.
 6. If local rules do not resolve the transaction and OpenAI is configured, ask
    for a constrained category suggestion. Store the result in
    `AiCategorizationDecision`.
-7. Revalidate high-confidence AI suggestions against current YNAB data before
-   writing. Lower-confidence, invalid, ambiguous, or failed suggestions remain
+7. Apply high-confidence AI suggestions through the persisted pending-update
+   workflow. Lower-confidence, invalid, ambiguous, or failed suggestions remain
    in review.
 8. Persist the transaction, decision, run result, and pending update before the
    remote write. Retry pending or failed updates on a later startup.
@@ -89,3 +89,9 @@ snapshot and designer files are generated outputs.
 translates typed requests to the YNAB REST API, while
 `YnabAuthenticationHandler` adds the bearer token. Keep secrets in options and
 configuration; the client must not read files or environment variables directly.
+The registered HTTP pipeline shares a sliding-window limiter of 200 requests per
+hour and pauses for one hour after a YNAB HTTP 429 response before retrying.
+The categorization batch fetches the transaction set once and derives approval
+and uncategorized subsets locally.
+Transfer repairs send both participant payee changes in one batch update after
+both transactions have been revalidated.

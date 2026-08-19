@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using Microsoft.EntityFrameworkCore;
 using YNABAutomationConsole.Categorization;
 using YNABAutomationConsole.Data;
@@ -16,36 +17,54 @@ internal static class Program
             .AddEnvironmentVariables()
             .Build();
 
+        Log.Logger = new LoggerConfiguration()
+            .ReadFrom.Configuration(configuration)
+            .CreateLogger();
+
         var services = new ServiceCollection();
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? "Host=localhost;Port=5432;Database=ynabautomation";
 
         services.AddDbContext<YnabDbContext>(options => options.UseNpgsql(connectionString));
+        Log.Information("Configuring the YNAB API client.");
         await services.AddYnabApi(configuration);
         services.AddCategorization(configuration);
+        services.AddSerilog(Log.Logger, dispose: true);
 
         using var serviceProvider = services.BuildServiceProvider();
         try
         {
+            Log.Information("Starting YNAB categorization console job.");
             await using (var scope = serviceProvider.CreateAsyncScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<YnabDbContext>();
+                Log.Information("Applying database migrations.");
                 await db.Database.MigrateAsync();
 
                 var processor = scope.ServiceProvider.GetRequiredService<YnabCategorizationProcessor>();
                 var result = await processor.ProcessAsync();
-                Console.WriteLine(
-                    $"Categorization complete: fetched={result.Fetched}, applied={result.Applied}, proposed={result.Proposed}, " +
-                    $"review={result.ReviewRequired}, skipped={result.Skipped}, failed={result.Failed}.");
+                Log.Information(
+                    "Categorization complete: fetched={Fetched}, applied={Applied}, proposed={Proposed}, " +
+                    "review={ReviewRequired}, skipped={Skipped}, failed={Failed}.",
+                    result.Fetched,
+                    result.Applied,
+                    result.Proposed,
+                    result.ReviewRequired,
+                    result.Skipped,
+                    result.Failed);
             }
+            Log.Information("YNAB API client configured for plan '{PlanId}'.",
+                configuration["Ynab:PlanId"] ?? "not configured");
         }
         catch (DbUpdateException exception)
         {
-            Console.Error.WriteLine("Database update failed:");
-            Console.Error.WriteLine(exception.InnerException?.Message ?? exception.Message);
+            Log.Error(exception, "Database update failed: {Message}",
+                exception.InnerException?.Message ?? exception.Message);
             throw;
         }
-
-        Console.WriteLine($"YNAB API client configured for plan '{configuration["Ynab:PlanId"] ?? "not configured"}'.");
+        finally
+        {
+            await Log.CloseAndFlushAsync();
+        }
     }
 }

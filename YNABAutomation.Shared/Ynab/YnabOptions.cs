@@ -9,4 +9,22 @@ public sealed class YnabOptions
     public string ApiKey { get; set; } = string.Empty;
 
     public string? PlanId { get; set; }
+
+    public bool UseDateRange { get; set; }
+
+    public DateOnly? SinceDate { get; set; }
+
+    public DateOnly? UntilDate { get; set; }
+
+    public (DateOnly SinceDate, DateOnly UntilDate) GetTransactionDateRange(DateOnly today)
+    {
+        var sinceDate = SinceDate ?? today.AddMonths(-1);
+        var untilDate = UntilDate ?? today;
+        if (sinceDate > untilDate)
+        {
+            throw new ArgumentException("Ynab:SinceDate must be on or before Ynab:UntilDate.");
+        }
+
+        return (sinceDate, untilDate);
+    }
 }

@@ -20,9 +20,11 @@
     .ai-decisions-page td:nth-child(3), .ai-decisions-page td:nth-child(5) { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
     .ai-decisions-page__status { display: inline-block; padding: .25rem .55rem; border-radius: 999px; background: #e9efff; color: #2546a0; font-size: .8rem; font-weight: 700; white-space: nowrap; }
     .ai-decisions-page__empty { padding: 1.5rem; border: 1px dashed #b9c5d5; border-radius: .75rem; color: #5d6878; background: #fafcff; }
-    .ai-decisions-page__pager { display: flex; gap: .75rem; margin-top: 1rem; }
-    .ai-decisions-page__pager a { padding: .45rem .7rem; border: 1px solid #b9c5d5; border-radius: .35rem; color: #2546a0; background: #fff; font-weight: 600; text-decoration: none; }
+    .ai-decisions-page__pager { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: 1rem; }
+    .ai-decisions-page__pager a, .ai-decisions-page__current { padding: .45rem .7rem; border: 1px solid #b9c5d5; border-radius: .35rem; color: #2546a0; background: #fff; font-weight: 600; text-decoration: none; }
     .ai-decisions-page__pager a:hover { border-color: #2546a0; background: #e9efff; }
+    .ai-decisions-page__current { border-color: #2546a0; background: #2546a0; color: #fff; }
+    .ai-decisions-page__summary { margin-left: .25rem; color: #5d6878; font-size: .9rem; }
     @@media (max-width: 40rem) { .ai-decisions-page__header { align-items: start; flex-direction: column; } }
 </style>
 <section class="ai-decisions-page" aria-labelledby="ai-decisions-heading">
@@ -31,7 +33,7 @@
             <h1 id="ai-decisions-heading">AI Decisions</h1>
             <p>Review OpenAI categorization suggestions and their outcomes.</p>
         </div>
-        <p class="ai-decisions-page__count">@Model.Decisions.Count decisions</p>
+        <p class="ai-decisions-page__count">@Model.TotalDecisionCount decisions</p>
     </div>
     @if (Model.Decisions.Count == 0)
     {
@@ -68,11 +70,31 @@
             </div>
         </div>
     }
-    @if (Model.PageNumber > 1 || Model.HasNextPage)
+    @if (Model.TotalPages > 1)
     {
         <nav class="ai-decisions-page__pager" aria-label="AI decision pagination">
-            @if (Model.PageNumber > 1) { <a asp-route-pageNumber="@(Model.PageNumber - 1)">Previous</a> }
-            @if (Model.HasNextPage) { <a asp-route-pageNumber="@(Model.PageNumber + 1)">Next</a> }
+            @if (Model.PageNumber > 1)
+            {
+                <a asp-route-pageNumber="1">First</a>
+            }
+            @for (var pageNumber = Math.Max(1, Model.PageNumber - 2);
+                  pageNumber <= Math.Min(Model.TotalPages, Model.PageNumber + 2);
+                  pageNumber++)
+            {
+                if (pageNumber == Model.PageNumber)
+                {
+                    <span class="ai-decisions-page__current" aria-current="page">@pageNumber</span>
+                }
+                else
+                {
+                    <a asp-route-pageNumber="@pageNumber">@pageNumber</a>
+                }
+            }
+            @if (Model.PageNumber < Model.TotalPages)
+            {
+                <a asp-route-pageNumber="@Model.TotalPages">Last</a>
+            }
+            <span class="ai-decisions-page__summary">Page @Model.PageNumber of @Model.TotalPages</span>
         </nav>
     }
 </section>

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YNABAutomationConsole.Data;
 using YNABAutomationConsole.Ynab;
@@ -9,9 +10,12 @@ namespace YNABAutomationConsole.Categorization;
 public sealed class TransferReconciliationService(
     YnabDbContext db,
     IYnabApiClient ynab,
-    IOptions<TransferOptions> options)
+    IOptions<TransferOptions> options,
+    ILogger<TransferReconciliationService>? logger = null)
 {
     private readonly TransferOptions _options = options.Value;
+    private readonly ILogger<TransferReconciliationService> _logger =
+        logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<TransferReconciliationService>.Instance;
 
     public async Task<bool> ProcessAsync(
         Transaction transaction,
@@ -21,6 +25,9 @@ public sealed class TransferReconciliationService(
         IReadOnlyDictionary<Guid, Account> accounts,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "Evaluating transaction {TransactionId} for transfer reconciliation: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}.",
+            transaction.Id, transaction.Date, transaction.PayeeName, transaction.Amount, local.Direction);
         var existing = await db.TransferCandidates
             .SingleOrDefaultAsync(item => item.YnabTransactionId == transaction.Id, cancellationToken);
         if (existing?.Status is TransferCandidateStatus.Repaired or TransferCandidateStatus.Matched)
@@ -47,6 +54,9 @@ public sealed class TransferReconciliationService(
         {
             return false;
         }
+        _logger.LogInformation(
+            "Transaction {TransactionId} looks like a transfer: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}, possible_matches={MatchCount}.",
+            transaction.Id, transaction.Date, transaction.PayeeName, transaction.Amount, local.Direction, matches.Count);
 
         var candidate = existing ?? new TransferCandidate
         {
@@ -138,12 +148,11 @@ public sealed class TransferReconciliationService(
             return SetReview(candidate, "A transfer participant changed while being evaluated.", local, run);
         }
 
-        await ynab.UpdateTransactionAsync(
-            new UpdateTransactionCategoryRequest(transaction.Id, null, null, counterpartAccount.TransferPayeeId),
-            cancellationToken);
-        await ynab.UpdateTransactionAsync(
-            new UpdateTransactionCategoryRequest(counterpart.Id, null, null, sourceAccount.TransferPayeeId),
-            cancellationToken);
+        await ynab.UpdateTransactionsAsync(
+        [
+            UpdateTransactionsRequest.ById(transaction.Id, null, payeeId: counterpartAccount.TransferPayeeId),
+            UpdateTransactionsRequest.ById(counterpart.Id, null, payeeId: sourceAccount.TransferPayeeId)
+        ], cancellationToken);
 
         candidate.Status = TransferCandidateStatus.Repaired;
         candidate.MatchedTransactionId = counterpart.Id;

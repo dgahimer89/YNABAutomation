@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using YNABAutomationConsole.Categorization;
 using YNABAutomationConsole.Data;
 using YNABAutomationConsole.Ynab;
@@ -9,7 +10,9 @@ namespace YNABAutomationWeb.Pages.Transactions;
 
 public sealed class ResolveModel(
     YnabDbContext db,
-    ManualTransactionResolutionService resolutionService) : PageModel
+    ManualTransactionResolutionService resolutionService,
+    YnabCategorizationProcessor categorizationProcessor,
+    ILogger<ResolveModel> logger) : PageModel
 {
     [BindProperty(SupportsGet = true)]
     public string Id { get; set; } = string.Empty;
@@ -31,12 +34,14 @@ public sealed class ResolveModel(
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         await LoadAsync(cancellationToken);
+        LogTransactionStatus();
         return Transaction is null ? NotFound() : Page();
     }
 
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
+        logger.LogInformation("Submitting manual resolution for transaction {TransactionId}.", Id);
         if (SelectedCategoryId is null)
         {
             ModelState.AddModelError(nameof(SelectedCategoryId), "Select a category.");
@@ -56,11 +61,31 @@ public sealed class ResolveModel(
         Message = outcome.Message;
         if (outcome.Result is ManualResolutionResult.Applied or ManualResolutionResult.AlreadyResolved)
         {
+            logger.LogInformation("Manual resolution completed for transaction {TransactionId}: {Result}.",
+                Id, outcome.Result);
+            await categorizationProcessor.ProcessAsync(
+                new HashSet<string>(StringComparer.Ordinal) { Id },
+                cancellationToken);
             return RedirectToPage("/Transactions/Transactions", new { message = outcome.Message });
         }
 
         await LoadAsync(cancellationToken);
+        LogTransactionStatus();
         return Transaction is null ? NotFound() : Page();
+    }
+
+    private void LogTransactionStatus()
+    {
+        if (Transaction is not null)
+        {
+            logger.LogInformation(
+                "Loading transaction {TransactionId} for review: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}.",
+                Transaction.YnabTransactionId,
+                Transaction.TransactionDate,
+                Transaction.PayeeName,
+                Transaction.Amount,
+                Transaction.Direction);
+        }
     }
 
     private async Task LoadAsync(CancellationToken cancellationToken)

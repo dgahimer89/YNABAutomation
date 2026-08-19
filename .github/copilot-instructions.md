@@ -52,8 +52,8 @@ DI registrations before adding parallel abstractions.
   the configured sample-size and consistency thresholds.
 - Transfers, deleted transactions, and transactions without a payee remain
   outside normal categorization.
-- AI suggestions must be constrained to currently allowed YNAB categories,
-  audited, and revalidated against the current transaction before auto-apply.
+- AI suggestions must be constrained to currently allowed YNAB categories and
+  audited before auto-apply.
 - Pending remote updates are persisted and retried; preserve this behavior when
   changing update orchestration.
 

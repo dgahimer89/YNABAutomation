@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.ClientModel;
 using System.Text.Json;
@@ -24,19 +25,36 @@ public sealed class YnabCategorizationProcessor(
     AutoApplyPolicy policy,
     IOptions<CategorizationOptions> options,
     IOptions<OpenAiOptions> openAiOptions,
+    IOptions<YnabOptions> ynabOptions,
     IAiCategorizer aiCategorizer,
     IProposedChangeWriter proposedChangeWriter,
-    TransferReconciliationService? transferReconciliation = null)
+    TransferReconciliationService? transferReconciliation = null,
+    ILogger<YnabCategorizationProcessor>? logger = null)
 {
+    private readonly ILogger<YnabCategorizationProcessor> _logger =
+        logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<YnabCategorizationProcessor>.Instance;
     private readonly CategorizationOptions _options = options.Value;
     private readonly OpenAiOptions _openAiOptions = openAiOptions.Value;
+    private readonly YnabOptions _ynabOptions = ynabOptions.Value;
     private readonly TransferReconciliationService _transferReconciliation =
         transferReconciliation ?? new TransferReconciliationService(
             db, ynab, Options.Create(new TransferOptions()));
+    private IReadOnlyList<CategoryGroup>? _categoryGroups;
 
-    public async Task<CategorizationRunResult> ProcessAsync(CancellationToken cancellationToken = default)
+    public Task<CategorizationRunResult> ProcessAsync(
+        CancellationToken cancellationToken = default) =>
+        ProcessAsync(null, cancellationToken);
+
+    public async Task<CategorizationRunResult> ProcessAsync(
+        IReadOnlySet<string>? excludedTransactionIds,
+        CancellationToken cancellationToken = default)
     {
-        await RecoverPendingUpdatesAsync(cancellationToken);
+        excludedTransactionIds ??= EmptyTransactionIds;
+        _categoryGroups = null;
+        _logger.LogInformation(
+            "Starting categorization run. Excluded transactions: {ExcludedCount}.",
+            excludedTransactionIds.Count);
+        await RecoverPendingUpdatesAsync(excludedTransactionIds, cancellationToken);
 
         var run = new ProcessingRun
         {
@@ -45,23 +63,37 @@ public sealed class YnabCategorizationProcessor(
         };
         db.ProcessingRuns.Add(run);
         var aiFailureMessages = new List<string>();
+        (DateOnly SinceDate, DateOnly UntilDate)? dateRange = _ynabOptions.UseDateRange
+            ? _ynabOptions.GetTransactionDateRange(DateOnly.FromDateTime(DateTime.UtcNow))
+            : null;
 
-        var unapprovedTransactions = (await ynab.GetTransactionsAsync(
-            new GetTransactionsOptions { Type = TransactionType.Unapproved }, cancellationToken))
+        var allTransactions = (await ynab.GetTransactionsAsync(
+            new GetTransactionsOptions
+            {
+                SinceDate = dateRange?.SinceDate,
+                UntilDate = dateRange?.UntilDate
+            }, cancellationToken))
             .Data.Transactions;
+        var unapprovedTransactions = allTransactions
+            .Where(transaction => !transaction.Approved)
+            .ToArray();
+        _logger.LogInformation("Fetched {Count} unapproved transactions.", unapprovedTransactions.Length);
         await ApproveEligibleTransactionsAsync(unapprovedTransactions, cancellationToken);
-        var allTransactions = (await ynab.GetTransactionsAsync(cancellationToken: cancellationToken))
-            .Data.Transactions;
-        var response = await ynab.GetTransactionsAsync(
-            new GetTransactionsOptions { Type = TransactionType.Uncategorized }, cancellationToken);
-        run.FetchedCount = response.Data.Transactions.Count;
+        _logger.LogInformation("Fetched {Count} transactions for transfer matching.", allTransactions.Count);
+        var uncategorizedTransactions = allTransactions
+            .Where(transaction => transaction.CategoryId is null)
+            .ToArray();
+        run.FetchedCount = uncategorizedTransactions.Length;
+        _logger.LogInformation("Fetched {Count} uncategorized transactions.", run.FetchedCount);
         var accounts = (await ynab.GetPlansAsync(
             new GetPlansOptions { IncludeAccounts = true }, cancellationToken))
             .Data.Plans.SelectMany(plan => plan.Accounts).ToDictionary(account => account.Id);
+        _logger.LogInformation("Loaded {Count} accounts for transfer reconciliation.", accounts.Count);
 
-        foreach (var transaction in response.Data.Transactions)
+        foreach (var transaction in uncategorizedTransactions)
         {
-            if (IsReconciliationAdjustment(transaction))
+            if (excludedTransactionIds.Contains(transaction.Id)
+                || IsReconciliationAdjustment(transaction))
             {
                 continue;
             }
@@ -72,6 +104,15 @@ public sealed class YnabCategorizationProcessor(
 
         run.CompletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Completed categorization run {RunId}: fetched={Fetched}, applied={Applied}, proposed={Proposed}, review={Review}, skipped={Skipped}, failed={Failed}.",
+            run.Id,
+            run.FetchedCount,
+            run.AppliedCount,
+            run.ProposedCount,
+            run.ReviewCount,
+            run.SkippedCount,
+            run.FailedCount);
         return new(
             run.FetchedCount,
             run.AppliedCount,
@@ -121,17 +162,26 @@ public sealed class YnabCategorizationProcessor(
         if (await _transferReconciliation.ProcessAsync(
             transaction, allTransactions, local, run, accounts, cancellationToken))
         {
+            _logger.LogInformation(
+                "Transaction {TransactionId} handled by transfer reconciliation: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}.",
+                transaction.Id, transaction.Date, transaction.PayeeName, transaction.Amount, local.Direction);
             return;
         }
 
         if (local.Status == TransactionProcessingStatus.Applied)
         {
+            _logger.LogInformation(
+                "Transaction {TransactionId} was already applied: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}.",
+                transaction.Id, transaction.Date, transaction.PayeeName, transaction.Amount, local.Direction);
             run.SkippedCount++;
             return;
         }
 
         if (!eligibility.IsEligible || local.NormalizedPayee is null)
         {
+            _logger.LogInformation(
+                "Skipping transaction {TransactionId}: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}, reason={Reason}.",
+                transaction.Id, transaction.Date, transaction.PayeeName, transaction.Amount, local.Direction, eligibility.Reason);
             local.Status = TransactionProcessingStatus.Skipped;
             AddDecision(run, local, null, CategorizationDecisionStatus.Skipped, 0, null, eligibility.Reason);
             run.SkippedCount++;
@@ -166,6 +216,9 @@ public sealed class YnabCategorizationProcessor(
         {
             if (!aiCategorizer.IsConfigured)
             {
+                _logger.LogInformation(
+                    "Transaction {TransactionId} requires review: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}, AI categorization is not configured.",
+                    transaction.Id, transaction.Date, transaction.PayeeName, transaction.Amount, local.Direction);
                 return false;
             }
 
@@ -179,7 +232,7 @@ public sealed class YnabCategorizationProcessor(
             IReadOnlyList<CategoryGroup> categoryGroups;
             try
             {
-                categoryGroups = (await ynab.GetCategoriesAsync(cancellationToken)).Data.CategoryGroups
+                _categoryGroups ??= (await ynab.GetCategoriesAsync(cancellationToken)).Data.CategoryGroups
                     .Where(group => !group.Hidden && !group.Deleted)
                     .Select(group => new CategoryGroup
                     {
@@ -189,6 +242,7 @@ public sealed class YnabCategorizationProcessor(
                     })
                     .Where(group => group.Categories.Count > 0)
                     .ToArray();
+                categoryGroups = _categoryGroups!;
                 var categories = categoryGroups
                     .SelectMany(group => group.Categories.Select(category => new AiCategory(category.Id, category.Name, group.Name)))
                     .ToArray();
@@ -221,6 +275,7 @@ public sealed class YnabCategorizationProcessor(
             }
             catch (Exception exception) when (exception is ClientResultException or HttpRequestException or TaskCanceledException or InvalidDataException or JsonException)
             {
+                _logger.LogInformation(exception, "AI categorization failed for transaction {TransactionId}.", transaction.Id);
                 local.Status = TransactionProcessingStatus.ReviewRequired;
                 AddAiDecision(local, null, null, null, false, false, AiDecisionOutcome.Failed, exception.Message);
                 aiFailureMessages.Add(exception.Message);
@@ -269,6 +324,7 @@ public sealed class YnabCategorizationProcessor(
 
             if (!thresholdMet || aiCandidate is null)
             {
+                _logger.LogInformation("AI suggestion for transaction {TransactionId} requires review.", transaction.Id);
                 local.Status = TransactionProcessingStatus.ReviewRequired;
                 AddDecision(run, local, aiCandidate, CategorizationDecisionStatus.ReviewRequired, 0, result.Confidence,
                     result.RequiresReview ? "OpenAI requested manual review." : "OpenAI confidence is below the configured auto-apply threshold.");
@@ -278,6 +334,7 @@ public sealed class YnabCategorizationProcessor(
 
             if (_options.DryRun)
             {
+                _logger.LogInformation("Proposing AI category for transaction {TransactionId} in dry-run mode.", transaction.Id);
                 local.Status = TransactionProcessingStatus.DryRun;
                 AddDecision(run, local, aiCandidate, CategorizationDecisionStatus.DryRun, 0, result.Confidence, result.Reason);
                 proposedChangeWriter.Write(transaction.Id, transaction.PayeeName, transaction.Amount, categoryId, result.Confidence, result.Reason);
@@ -303,25 +360,6 @@ public sealed class YnabCategorizationProcessor(
             {
                 if (local.Status == TransactionProcessingStatus.Applied)
                 {
-                    return true;
-                }
-
-                var current = await ynab.GetTransactionAsync(transaction.Id, cancellationToken);
-                if (current.Data.Transaction.CategoryId is Guid currentCategoryId)
-                {
-                    pending.Status = currentCategoryId == categoryId ? PendingUpdateStatus.Succeeded : PendingUpdateStatus.Failed;
-                    pending.CompletedAt = DateTimeOffset.UtcNow;
-                    pending.LastError = currentCategoryId == categoryId ? null : "Transaction was categorized externally.";
-                    local.Status = TransactionProcessingStatus.Applied;
-                    local.CategorizedAt = pending.CompletedAt;
-                    aiDecision.WasAutoApplied = currentCategoryId == categoryId;
-                    aiDecision.Outcome = currentCategoryId == categoryId ? AiDecisionOutcome.AutoApplied : AiDecisionOutcome.Failed;
-                    aiDecision.FailureReason = pending.LastError;
-                    local.Decisions.Last().Status = currentCategoryId == categoryId
-                        ? CategorizationDecisionStatus.AutoApplied
-                        : CategorizationDecisionStatus.Skipped;
-                    run.AppliedCount++;
-                    await db.SaveChangesAsync(cancellationToken);
                     return true;
                 }
 
@@ -392,6 +430,7 @@ public sealed class YnabCategorizationProcessor(
 
         if (_options.DryRun)
         {
+        _logger.LogInformation("Proposing category for transaction {TransactionId} in dry-run mode.", transaction.Id);
             local.Status = TransactionProcessingStatus.DryRun;
             AddDecision(run, local, candidate, CategorizationDecisionStatus.DryRun, candidate.SampleSize, candidate.Consistency, reason);
             proposedChangeWriter.Write(transaction.Id, transaction.PayeeName, transaction.Amount, candidate.CategoryId!.Value, null, reason);
@@ -415,26 +454,6 @@ public sealed class YnabCategorizationProcessor(
 
         try
         {
-            var current = await ynab.GetTransactionAsync(transaction.Id, cancellationToken);
-            if (current.Data.Transaction.CategoryId is Guid currentCategoryId)
-            {
-                pending.Status = currentCategoryId == candidate.CategoryId
-                    ? PendingUpdateStatus.Succeeded
-                    : PendingUpdateStatus.Failed;
-                pending.CompletedAt = DateTimeOffset.UtcNow;
-                pending.LastError = currentCategoryId == candidate.CategoryId
-                    ? null
-                    : "Transaction was categorized externally.";
-                local.Status = TransactionProcessingStatus.Applied;
-                local.CategorizedAt = pending.CompletedAt;
-                local.Decisions.Last().Status = currentCategoryId == candidate.CategoryId
-                    ? CategorizationDecisionStatus.AutoApplied
-                    : CategorizationDecisionStatus.Skipped;
-                run.AppliedCount++;
-                await db.SaveChangesAsync(cancellationToken);
-                return;
-            }
-
             await ynab.UpdateTransactionAsync(
                 new UpdateTransactionCategoryRequest(
                     transaction.Id, candidate.CategoryId, IsCleared(transaction)), cancellationToken);
@@ -474,6 +493,7 @@ public sealed class YnabCategorizationProcessor(
             .ToArray();
         if (approvals.Length > 0)
         {
+            _logger.LogInformation("Approving {Count} eligible transactions.", approvals.Length);
             await ynab.UpdateTransactionsAsync(approvals, cancellationToken);
         }
     }
@@ -487,7 +507,9 @@ public sealed class YnabCategorizationProcessor(
             "Reconciliation Balance Adjustment",
             StringComparison.OrdinalIgnoreCase);
 
-    private async Task RecoverPendingUpdatesAsync(CancellationToken cancellationToken)
+    private async Task RecoverPendingUpdatesAsync(
+        IReadOnlySet<string> excludedTransactionIds,
+        CancellationToken cancellationToken)
     {
         var pending = await db.PendingCategoryUpdates
             .Include(update => update.ProcessedYnabTransaction)
@@ -501,9 +523,15 @@ public sealed class YnabCategorizationProcessor(
             {
                 continue;
             }
+            if (excludedTransactionIds.Contains(update.ProcessedYnabTransaction.YnabTransactionId))
+            {
+                continue;
+            }
 
             try
             {
+                _logger.LogInformation("Recovering pending update for transaction {TransactionId}.",
+                    update.ProcessedYnabTransaction.YnabTransactionId);
                 var current = await ynab.GetTransactionAsync(
                     update.ProcessedYnabTransaction.YnabTransactionId,
                     cancellationToken);
@@ -549,6 +577,8 @@ public sealed class YnabCategorizationProcessor(
             }
             catch (Exception exception) when (exception is YnabApiException or HttpRequestException or TaskCanceledException)
             {
+                _logger.LogInformation(exception, "Pending update recovery failed for transaction {TransactionId}.",
+                    update.ProcessedYnabTransaction.YnabTransactionId);
                 update.Status = PendingUpdateStatus.Failed;
                 update.Attempts++;
                 update.LastAttemptAt = DateTimeOffset.UtcNow;
@@ -558,6 +588,9 @@ public sealed class YnabCategorizationProcessor(
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    private static readonly IReadOnlySet<string> EmptyTransactionIds =
+        new HashSet<string>(StringComparer.Ordinal);
 
     private void AddDecision(
         ProcessingRun run,

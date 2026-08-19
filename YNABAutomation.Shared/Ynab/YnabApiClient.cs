@@ -1,22 +1,27 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace YNABAutomationConsole.Ynab;
 
 public sealed class YnabApiClient(
     HttpClient httpClient,
-    IOptions<YnabOptions> options) : IYnabApiClient
+    IOptions<YnabOptions> options,
+    ILogger<YnabApiClient>? logger = null) : IYnabApiClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly YnabOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+    private readonly ILogger<YnabApiClient> _logger =
+        logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<YnabApiClient>.Instance;
 
     public async Task<PlansResponse> GetPlansAsync(
         GetPlansOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Requesting YNAB plans.");
         var query = options?.IncludeAccounts is bool includeAccounts
             ? $"?include_accounts={includeAccounts.ToString().ToLowerInvariant()}"
             : string.Empty;
@@ -29,6 +34,7 @@ public sealed class YnabApiClient(
         GetTransactionsOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Requesting YNAB transactions. Type={Type}.", options?.Type);
         options ??= new GetTransactionsOptions();
         options.Validate();
 
@@ -55,6 +61,7 @@ public sealed class YnabApiClient(
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transactionId);
+        _logger.LogInformation("Requesting YNAB transaction {TransactionId}.", transactionId);
 
         var planId = await GetPlanIdAsync(cancellationToken);
         using var response = await _httpClient.GetAsync(
@@ -66,6 +73,7 @@ public sealed class YnabApiClient(
     public async Task<CategoriesResponse> GetCategoriesAsync(
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Requesting YNAB categories.");
         var planId = await GetPlanIdAsync(cancellationToken);
         using var response = await _httpClient.GetAsync(
             $"plans/{planId}/categories?last_knowledge_of_server=0", cancellationToken);
@@ -81,6 +89,7 @@ public sealed class YnabApiClient(
         {
             throw new ArgumentException("At least one transaction is required.", nameof(transactions));
         }
+        _logger.LogInformation("Updating {Count} YNAB transactions.", transactions.Count);
 
         var body = new PatchTransactionsBody
         {
@@ -105,6 +114,7 @@ public sealed class YnabApiClient(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(transaction);
+        _logger.LogInformation("Updating YNAB transaction {TransactionId}.", transaction.TransactionId);
 
         var body = new PutTransactionBody
         {
@@ -137,6 +147,7 @@ public sealed class YnabApiClient(
 
         if (_resolvedPlanId is null)
         {
+            _logger.LogInformation("Discovering the YNAB plan ID.");
             var plans = await GetPlansAsync(cancellationToken: cancellationToken);
             if (plans.Data.Plans.Count != 1)
             {

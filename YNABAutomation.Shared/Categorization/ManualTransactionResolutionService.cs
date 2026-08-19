@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using YNABAutomationConsole.Data;
 using YNABAutomationConsole.Ynab;
 
@@ -20,11 +21,15 @@ public sealed record ManualResolutionOutcome(
 
 public sealed class ManualTransactionResolutionService(
     YnabDbContext db,
-    IYnabApiClient ynab)
+    IYnabApiClient ynab,
+    ILogger<ManualTransactionResolutionService>? logger = null)
 {
+    private readonly ILogger<ManualTransactionResolutionService> _logger =
+        logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ManualTransactionResolutionService>.Instance;
     public async Task<IReadOnlyList<CategoryGroup>> GetValidCategoryGroupsAsync(
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Loading valid YNAB categories.");
         var response = await ynab.GetCategoriesAsync(cancellationToken);
         return response.Data.CategoryGroups
             .Where(group => !group.Hidden && !group.Deleted)
@@ -56,10 +61,13 @@ public sealed class ManualTransactionResolutionService(
         bool createExplicitRule,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Resolving transaction {TransactionId} to category {CategoryId}.",
+            ynabTransactionId, categoryId);
         var validCategories = await GetValidCategoriesAsync(cancellationToken);
         var category = validCategories.SingleOrDefault(item => item.Id == categoryId);
         if (category is null)
         {
+            _logger.LogInformation("Rejected resolution for {TransactionId}: category is invalid.", ynabTransactionId);
             return new(ManualResolutionResult.InvalidCategory, "Select a valid current YNAB category.");
         }
 
@@ -72,11 +80,16 @@ public sealed class ManualTransactionResolutionService(
                 cancellationToken);
         if (local is null)
         {
+            _logger.LogInformation("Rejected resolution for {TransactionId}: transaction is not local.", ynabTransactionId);
             return new(ManualResolutionResult.NotFound, "The transaction no longer exists locally.");
         }
+        _logger.LogInformation(
+            "Resolving transaction {TransactionId}: date={Date}, payee='{PayeeName}', amount={Amount}, direction={Direction}.",
+            ynabTransactionId, local.TransactionDate, local.PayeeName, local.Amount, local.Direction);
 
         if (local.Status is not (TransactionProcessingStatus.ReviewRequired or TransactionProcessingStatus.UpdatePending))
         {
+            _logger.LogInformation("Transaction {TransactionId} was already resolved.", ynabTransactionId);
             return new(ManualResolutionResult.AlreadyResolved,
                 "This transaction was already resolved or is no longer awaiting review.");
         }
@@ -169,6 +182,7 @@ public sealed class ManualTransactionResolutionService(
         }
         catch (Exception exception) when (exception is YnabApiException or HttpRequestException or TaskCanceledException)
         {
+            _logger.LogInformation(exception, "YNAB rejected manual resolution for {TransactionId}.", ynabTransactionId);
             pending.Status = PendingUpdateStatus.Failed;
             pending.Attempts++;
             pending.LastAttemptAt = DateTimeOffset.UtcNow;

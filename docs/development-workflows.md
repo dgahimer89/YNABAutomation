@@ -7,6 +7,13 @@ secrets or environment variables for `Ynab:ApiKey`, `Ynab:PlanId`,
 `ConnectionStrings:DefaultConnection`, and `OpenAI:ApiKey`. Nested environment
 variables use double underscores, such as `OpenAI__ApiKey`.
 
+`Ynab:SinceDate` and `Ynab:UntilDate` accept ISO dates (`yyyy-MM-dd`) to limit
+transaction queries. When either value is `null`, it defaults to one month
+before the current UTC date for `SinceDate` or the current UTC date for
+`UntilDate`. Date filtering is enabled for the console through
+`Ynab:UseDateRange`; the web application disables it so its transaction views
+are not limited by these settings.
+
 The web and console projects share a `UserSecretsId`, but both composition roots
 must be checked when changing configuration behavior. Never place real tokens or
 database credentials in source, tests, or documentation.
@@ -28,6 +35,23 @@ dotnet run --project YNABAutomationConsole
 Both applications apply pending EF migrations during startup. The console then
 processes one batch; the web app starts the Razor Pages host.
 
+Both applications configure Serilog with a console sink in their
+`appsettings.json`. The default minimum level is `Information`, including
+progress messages from the shared categorization and YNAB API services. Adjust
+the `Serilog:MinimumLevel` settings in the relevant application configuration
+to change what is emitted.
+
+The shared YNAB HTTP pipeline permits 200 requests per rolling hour. If YNAB
+returns HTTP 429, it logs the rate-limit condition, pauses requests for one
+hour, and retries the interrupted request. Categorization reduces read traffic
+by fetching transactions once per run and caching categories for AI suggestions
+within that run.
+
+After a manual transaction resolution, the Transactions review pages rerun the
+categorization processor against remaining uncategorized YNAB transactions.
+Bulk review submissions exclude every transaction submitted on that page until
+its manual resolution has been attempted.
+
 ## Categorization safety
 
 `Categorization:DryRun` defaults to `true`. Dry-run records and reports proposed
@@ -36,8 +60,10 @@ the proposed behavior is understood.
 
 `MinimumLearnedSampleSize` and `MinimumLearnedConsistency` protect learned
 rules. `OpenAI:AutoApplyConfidenceThreshold` controls the confidence threshold
-for AI auto-apply, but AI output must also be valid, not marked for review, and
-revalidated against YNAB. Preserve these gates when changing processor logic.
+for AI auto-apply, but AI output must also be valid and not marked for review.
+Automatic category writes use the persisted pending-update workflow and do not
+perform a per-transaction pre-write re-check. Preserve these gates when
+changing processor logic.
 
 ## Database and migrations
 

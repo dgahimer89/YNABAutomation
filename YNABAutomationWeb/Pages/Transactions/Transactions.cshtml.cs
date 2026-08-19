@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using YNABAutomationConsole.Categorization;
 using YNABAutomationConsole.Data;
 using YNABAutomationConsole.Ynab;
@@ -9,7 +10,9 @@ namespace YNABAutomationWeb.Pages;
 
 public sealed class TransactionsModel(
     YnabDbContext db,
-    ManualTransactionResolutionService resolutionService) : PageModel
+    ManualTransactionResolutionService resolutionService,
+    YnabCategorizationProcessor categorizationProcessor,
+    ILogger<TransactionsModel> logger) : PageModel
 {
     [BindProperty(SupportsGet = true)]
     public string? Message { get; set; }
@@ -23,12 +26,15 @@ public sealed class TransactionsModel(
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        logger.LogInformation("Loading transactions awaiting review.");
         await LoadAsync(cancellationToken);
     }
 
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> OnPostBulkCategorizeAsync(CancellationToken cancellationToken)
     {
+        logger.LogInformation("Processing bulk categorization submission for {Count} selections.",
+            CategorySelections.Count);
         await LoadAsync(cancellationToken);
 
         var assignments = new List<(string TransactionId, Guid CategoryId)>();
@@ -56,6 +62,7 @@ public sealed class TransactionsModel(
 
         if (assignments.Count == 0)
         {
+            logger.LogInformation("Bulk categorization submission contained no valid assignments.");
             return RedirectToPage(new { message = "No transactions were categorized." });
         }
 
@@ -67,6 +74,17 @@ public sealed class TransactionsModel(
                 assignment.CategoryId,
                 createExplicitRule: false,
                 cancellationToken: cancellationToken));
+        }
+
+        var rerunIds = assignments
+            .Select(assignment => assignment.TransactionId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (outcomes.Any(outcome =>
+            outcome.Result is ManualResolutionResult.Applied or ManualResolutionResult.AlreadyResolved))
+        {
+            logger.LogInformation("Rerunning categorization for {Count} manually resolved transactions.",
+                rerunIds.Count);
+            await categorizationProcessor.ProcessAsync(rerunIds, cancellationToken);
         }
 
         var applied = outcomes.Count(outcome => outcome.Result == ManualResolutionResult.Applied);
@@ -94,6 +112,7 @@ public sealed class TransactionsModel(
             .OrderByDescending(transaction => transaction.TransactionDate)
             .ThenBy(transaction => transaction.PayeeName)
             .ToListAsync(cancellationToken);
+        logger.LogInformation("Loaded {Count} transactions awaiting review.", Transactions.Count);
         CategoryGroups = await resolutionService.GetValidCategoryGroupsAsync(cancellationToken);
         Categories = CategoryGroups.SelectMany(group => group.Categories).ToArray();
     }

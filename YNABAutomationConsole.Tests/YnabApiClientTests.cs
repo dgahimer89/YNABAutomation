@@ -53,6 +53,30 @@ public sealed class YnabApiClientTests
     }
 
     [TestMethod]
+    public void YnabOptions_DefaultsToThePreviousMonthThroughToday()
+    {
+        var options = new YnabOptions();
+
+        var range = options.GetTransactionDateRange(new DateOnly(2025, 2, 15));
+
+        Assert.AreEqual(new DateOnly(2025, 1, 15), range.SinceDate);
+        Assert.AreEqual(new DateOnly(2025, 2, 15), range.UntilDate);
+    }
+
+    [TestMethod]
+    public void YnabOptions_RejectsAnInvertedDateRange()
+    {
+        var options = new YnabOptions
+        {
+            SinceDate = new DateOnly(2025, 2, 16),
+            UntilDate = new DateOnly(2025, 2, 15)
+        };
+
+        Assert.ThrowsExactly<ArgumentException>(
+            () => options.GetTransactionDateRange(new DateOnly(2025, 2, 15)));
+    }
+
+    [TestMethod]
     public async Task UpdateTransactionsAsync_SendsOnlyIdentifiersAndCategoryId()
     {
         var handler = new RecordingHandler(
@@ -106,6 +130,48 @@ public sealed class YnabApiClientTests
 
         Assert.AreEqual(HttpStatusCode.BadRequest, exception.StatusCode);
         Assert.AreEqual("Invalid category", exception.Error!.Detail);
+    }
+
+    [TestMethod]
+    public async Task RateLimitHandler_PausesAndRetriesAfterTooManyRequests()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.TooManyRequests, "{\"error\":{}}"),
+            (HttpStatusCode.OK, "{\"data\":{\"plans\":[]}}"));
+        var rateLimitHandler = new YnabRateLimitHandler(
+            new YnabRequestRateLimiter(),
+            rateLimitPause: TimeSpan.FromMilliseconds(1))
+        {
+            InnerHandler = handler
+        };
+        using var httpClient = new HttpClient(rateLimitHandler)
+        {
+            BaseAddress = new Uri("https://api.ynab.com/v1/")
+        };
+        var client = new YnabApiClient(
+            httpClient,
+            Options.Create(new YnabOptions { ApiKey = "test-key", PlanId = "plan-1" }));
+
+        var result = await client.GetPlansAsync();
+
+        Assert.AreEqual(0, result.Data.Plans.Count);
+        Assert.AreEqual(2, handler.RequestCount);
+    }
+
+    [TestMethod]
+    public async Task RequestRateLimiter_StopsTheTwoHundredAndFirstRequestWithinTheWindow()
+    {
+        var limiter = new YnabRequestRateLimiter();
+        for (var request = 0; request < 200; request++)
+        {
+            await limiter.WaitAsync(CancellationToken.None);
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsExceptionAsync<TaskCanceledException>(
+            () => limiter.WaitAsync(cancellation.Token));
     }
 
     [TestMethod]
@@ -199,6 +265,27 @@ public sealed class YnabApiClientTests
             {
                 Content = new StringContent(responseBody, System.Text.Encoding.UTF8, "application/json")
             };
+        }
+
+    }
+
+    private sealed class SequenceHandler(
+        params (HttpStatusCode StatusCode, string Body)[] responses) : HttpMessageHandler
+    {
+        private int _nextResponse;
+
+        public int RequestCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            var response = responses[Math.Min(_nextResponse++, responses.Length - 1)];
+            return Task.FromResult(new HttpResponseMessage(response.StatusCode)
+            {
+                Content = new StringContent(response.Body, System.Text.Encoding.UTF8, "application/json")
+            });
         }
     }
 }

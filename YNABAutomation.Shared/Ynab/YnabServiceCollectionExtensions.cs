@@ -25,12 +25,14 @@ public static class YnabServiceCollectionExtensions
 
         var resolvedOptions = CreateOptions(configuration);
         ValidateOptions(resolvedOptions);
+        var requestRateLimiter = new YnabRequestRateLimiter();
 
         if (string.IsNullOrWhiteSpace(resolvedOptions.PlanId))
         {
             var plans = await DiscoverPlansAsync(
                 resolvedOptions,
                 discoveryClient,
+                requestRateLimiter,
                 cancellationToken);
 
             if (plans.Data.Plans.Count != 1)
@@ -56,12 +58,15 @@ public static class YnabServiceCollectionExtensions
             .ValidateOnStart();
 
         services.AddTransient<YnabAuthenticationHandler>();
+        services.AddSingleton<IYnabRequestRateLimiter>(requestRateLimiter);
+        services.AddTransient<YnabRateLimitHandler>();
         services.AddHttpClient<IYnabApiClient, YnabApiClient>((serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<YnabOptions>>().Value;
                 client.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
             })
-            .AddHttpMessageHandler<YnabAuthenticationHandler>();
+            .AddHttpMessageHandler<YnabAuthenticationHandler>()
+            .AddHttpMessageHandler<YnabRateLimitHandler>();
 
         return services;
     }
@@ -69,21 +74,31 @@ public static class YnabServiceCollectionExtensions
     private static async Task<PlansResponse> DiscoverPlansAsync(
         YnabOptions options,
         HttpClient? discoveryClient,
+        IYnabRequestRateLimiter requestRateLimiter,
         CancellationToken cancellationToken)
     {
         if (discoveryClient is not null)
         {
+            await requestRateLimiter.WaitAsync(cancellationToken);
             var apiClient = new YnabApiClient(discoveryClient, Options.Create(options));
             return await apiClient.GetPlansAsync(cancellationToken: cancellationToken);
         }
 
+        HttpMessageHandler innerHandler;
+        Uri baseAddress;
+        innerHandler = new YnabAuthenticationHandler(Options.Create(options))
+        {
+            InnerHandler = new HttpClientHandler()
+        };
+        baseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
+
         using var client = new HttpClient(
-            new YnabAuthenticationHandler(Options.Create(options))
+            new YnabRateLimitHandler(requestRateLimiter)
             {
-                InnerHandler = new HttpClientHandler()
+                InnerHandler = innerHandler
             })
         {
-            BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute)
+            BaseAddress = baseAddress
         };
         var clientForDiscovery = new YnabApiClient(client, Options.Create(options));
         return await clientForDiscovery.GetPlansAsync(cancellationToken: cancellationToken);

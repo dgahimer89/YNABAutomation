@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace YNABAutomationConsole.Categorization;
 
 public interface IProposedChangeWriter
@@ -7,11 +9,23 @@ public interface IProposedChangeWriter
 
 public sealed class ConsoleProposedChangeWriter : IProposedChangeWriter
 {
+    private readonly ILogger<ConsoleProposedChangeWriter> _logger;
+
+    public ConsoleProposedChangeWriter(ILogger<ConsoleProposedChangeWriter> logger)
+    {
+        _logger = logger;
+    }
+
     public void Write(string transactionId, string? payeeName, long amount, Guid categoryId, decimal? aiConfidence, string reason)
     {
-        Console.WriteLine(
-            $"DRY RUN: transaction={transactionId}, payee='{payeeName}', amount={amount}, " +
-            $"proposed_category={categoryId}, ai_confidence={aiConfidence?.ToString("0.####") ?? "n/a"}, " +
-            $"reason='{reason}'. No YNAB change was made.");
+        _logger.LogInformation(
+            "DRY RUN: transaction={TransactionId}, payee='{PayeeName}', amount={Amount}, " +
+            "proposed_category={CategoryId}, ai_confidence={AiConfidence}, reason='{Reason}'. No YNAB change was made.",
+            transactionId,
+            payeeName,
+            amount,
+            categoryId,
+            aiConfidence?.ToString("0.####") ?? "n/a",
+            reason);
     }
 }
